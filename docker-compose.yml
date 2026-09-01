@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: discogs_player_postgres
+    environment:
+      POSTGRES_USER: discogs
+      POSTGRES_PASSWORD: discogs
+      POSTGRES_DB: discogs_player
+    ports:
+      - '5433:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U discogs -d discogs_player']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
