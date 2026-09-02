@@ -122,7 +122,10 @@ export function PlayerBar() {
           <div className="flex flex-col gap-2">
             <iframe
               title={`${state.track.releaseTitle} — Spotify`}
-              src={`https://open.spotify.com/embed/${state.entityType}/${state.spotifyId}`}
+              // `autoplay=1` : best-effort seulement, comme documenté (§14.7, PLAY-005) —
+              // Spotify ne garantit pas l'autoplay programmatique selon navigateur et
+              // connexion. Le bouton « Ouvrir dans Spotify » reste le filet de sécurité.
+              src={`https://open.spotify.com/embed/${state.entityType}/${state.spotifyId}?autoplay=1`}
               width="100%"
               height="152"
               allow="autoplay; encrypted-media; fullscreen; clipboard-write"

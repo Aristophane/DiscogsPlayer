@@ -137,8 +137,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
       playerRef.current = new window.YT.Player(target, {
         videoId,
-        playerVars: { playsinline: 1 },
+        // `autoplay: 1` suffit en général, mais certains navigateurs ignorent ce
+        // paramètre selon le moment exact où le lecteur devient prêt : le clic sur
+        // « play » est un vrai geste utilisateur, donc l'appel explicite dans `onReady`
+        // est autorisé par les politiques d'autoplay et sert de filet de sécurité — sans
+        // lui, la lecture démarrait parfois en pause, forçant à recliquer dans le lecteur.
+        playerVars: { playsinline: 1, autoplay: 1 },
         events: {
+          onReady: (event) => {
+            event.target.playVideo();
+          },
           onStateChange: (event) => {
             if (window.YT && event.data === window.YT.PlayerState.ENDED) {
               advanceQueueRef.current();
