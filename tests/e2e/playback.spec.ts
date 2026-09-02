@@ -51,6 +51,12 @@ test.beforeAll(async () => {
     insert into discogs_tracks (release_id, discogs_position, ordinal, title, title_normalized, type)
     values (${releaseA!.id}, 'A1', 0, 'Première Piste', 'premiere piste', 'track')
   `;
+  // Une seconde piste, sur la même édition, sans aucune correspondance : reproduit le
+  // scénario réel signalé — lire une piste résolue, puis une piste introuvable.
+  await sql`
+    insert into discogs_tracks (release_id, discogs_position, ordinal, title, title_normalized, type)
+    values (${releaseA!.id}, 'A2', 1, 'Deuxième Piste Introuvable', 'deuxieme piste introuvable', 'track')
+  `;
   await sql`
     insert into discogs_release_videos (release_id, url_canonical, provider, title)
     values (${releaseA!.id}, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
@@ -140,6 +146,41 @@ test('le bouton play d’un album résout depuis la vidéo Discogs, sans écran 
   await expect(page.getByRole('region', { name: 'Lecture en cours' })).toBeVisible();
   await expect(page.getByText('Première Piste')).toBeVisible();
   await expect(page.getByText('Résolution en cours…')).toHaveCount(0, { timeout: 5_000 });
+});
+
+test('lire une piste sans correspondance juste après une piste résolue ne casse pas la page', async ({
+  page,
+}) => {
+  // Reproduit le scénario réel signalé : sélectionner une piste résolue via l'API
+  // YouTube (montage impératif d'un <iframe> hors de React), puis une piste sans
+  // correspondance. La première version faisait planter React (`insertBefore` /
+  // `NotFoundError`) parce que le nœud cible YouTube changeait de position dans le JSX
+  // entre les deux états — voir `playback-context.tsx` et `player-bar.tsx`.
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+
+  await signIn(page);
+  await page.goto(`/sorties/${releaseWithVideoId}`);
+
+  const tracks = page.getByRole('button', { name: 'Lire cette piste' });
+  await tracks.nth(0).click();
+
+  await expect(page.getByRole('region', { name: 'Lecture en cours' })).toBeVisible();
+  await expect(page.getByText('Première Piste')).toBeVisible();
+  await expect(page.getByText('Résolution en cours…')).toHaveCount(0, { timeout: 5_000 });
+
+  await tracks.nth(1).click();
+
+  // Le repli manuel s'affiche pour la seconde piste, sans écran d'erreur Next.js et sans
+  // laisser l'ancien lecteur tourner en arrière-plan.
+  await expect(page.getByText('Cette piste n’a pas de correspondance connue.')).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(page.locator('[id*="nextjs"]')).toHaveCount(0);
+  await expect(page.getByText('Runtime')).toHaveCount(0);
+  await expect(page.locator('iframe[src*="youtube.com"]')).toHaveCount(0);
+
+  expect(pageErrors).toEqual([]);
 });
 
 test('sans correspondance connue, le repli manuel s’affiche sans planter', async ({ page }) => {

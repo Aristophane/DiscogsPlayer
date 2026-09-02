@@ -4,13 +4,22 @@
  * Le script n'est inséré qu'à la première lecture réelle, jamais au chargement d'une
  * page : « pas de chargement des scripts YouTube ou Spotify avant l'affichage d'un
  * lecteur » (§20.1). Mémorisé pour qu'un second appel ne réinsère pas le script.
+ *
+ * `new YT.Player(element, …)` **remplace** l'élément passé par un `<iframe>`, en dehors
+ * de tout contrôle de React. Si cet élément est rendu par du JSX, React garde en mémoire
+ * un nœud qui n'existe plus dans le DOM ; sa prochaine tentative de le déplacer ou de le
+ * retirer échoue avec `insertBefore`/`removeChild is not a child of this node` — observé
+ * en usage réel en enchaînant deux pistes. `playback-context.tsx` crée donc la cible du
+ * lecteur de façon impérative (`document.createElement`), jamais via JSX.
  */
 
 declare global {
   interface Window {
     YT?: {
       Player: new (
-        elementId: string,
+        // Un élément DOM direct, jamais un id rendu par React (voir iframe-loader.ts
+        // pour l'explication de cette contrainte).
+        element: HTMLElement,
         options: {
           videoId?: string;
           playerVars?: Record<string, string | number>;

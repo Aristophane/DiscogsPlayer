@@ -33,7 +33,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         */}
         <PlaybackProvider>
           <AppHeader />
-          <div className="flex flex-1 flex-col pb-24">{children}</div>
+          {/*
+            L'espace réservé suit la hauteur réelle de la barre de lecture (variable CSS
+            posée par `PlayerBar`), pas une valeur figée : une vidéo YouTube affichée fait
+            grossir la barre bien au-delà d'un padding fixe, ce qui recouvrait des boutons
+            en bas de page (défaut réel constaté en test e2e sur mobile).
+          */}
+          <div className="flex flex-1 flex-col pb-[var(--player-bar-height,0px)]">{children}</div>
           <PlayerBar />
         </PlaybackProvider>
       </body>

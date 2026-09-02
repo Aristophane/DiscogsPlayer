@@ -48,13 +48,15 @@ type PlaybackContextValue = {
   playAlbum: (discogsReleaseId: string) => Promise<void>;
   pasteUrl: (url: string) => Promise<boolean>;
   close: () => void;
-  /** Élément DOM cible du lecteur YouTube — le lecteur persistant le mesure et l'affiche. */
-  youtubeMountId: string;
+  /**
+   * Ref callback à poser sur le conteneur stable du lecteur (`PlayerBar`). Le nœud que
+   * l'API YouTube mute réellement est créé à l'intérieur, de façon impérative — jamais
+   * par JSX (voir `iframe-loader.ts`).
+   */
+  setYoutubeContainer: (element: HTMLDivElement | null) => void;
 };
 
 const PlaybackContext = createContext<PlaybackContextValue | null>(null);
-
-const YOUTUBE_MOUNT_ID = 'discogs-player-youtube-target';
 
 type ResolutionResponse = {
   track?: TrackMeta;
@@ -82,6 +84,13 @@ async function postJson(url: string, body: unknown): Promise<ResolutionResponse 
 export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PlaybackState>({ status: 'idle' });
   const playerRef = useRef<YtPlayer | null>(null);
+  // Conteneur React-managé, stable dans le temps ; son contenu, lui, est créé et détruit
+  // à la main pour ne jamais entrer en conflit avec les mutations DOM de l'API YouTube.
+  const youtubeContainerRef = useRef<HTMLDivElement | null>(null);
+
+  const setYoutubeContainer = useCallback((element: HTMLDivElement | null) => {
+    youtubeContainerRef.current = element;
+  }, []);
 
   // `state` en miroir, lu de façon synchrone par les callbacks (ex. la fin d'une vidéo)
   // sans passer par le hack `setState(current => …)` uniquement pour lire une valeur —
@@ -113,7 +122,20 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      playerRef.current = new window.YT.Player(YOUTUBE_MOUNT_ID, {
+      const container = youtubeContainerRef.current;
+      if (!container) {
+        // Le conteneur est toujours rendu par `PlayerBar` ; ce cas ne devrait pas se
+        // produire, mais échouer silencieusement vaut mieux que planter la lecture.
+        return;
+      }
+
+      // Créée hors de React : c'est ce nœud, et lui seul, que l'API YouTube remplacera
+      // par un <iframe>. React ne le rend jamais via JSX, donc ne peut jamais tenter de
+      // le déplacer ou de le retirer une fois cette substitution faite.
+      const target = document.createElement('div');
+      container.appendChild(target);
+
+      playerRef.current = new window.YT.Player(target, {
         videoId,
         playerVars: { playsinline: 1 },
         events: {
@@ -127,9 +149,20 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const stopYoutubePlayer = useCallback(() => {
+    playerRef.current?.destroy();
+    playerRef.current = null;
+    if (youtubeContainerRef.current) {
+      youtubeContainerRef.current.innerHTML = '';
+    }
+  }, []);
+
   const applyResolution = useCallback(
     (response: ResolutionResponse) => {
       if (response.status === 'empty' || !response.track) {
+        // Sans quoi la vidéo précédente resterait montée — hors écran (le conteneur
+        // passe en `hidden`), mais toujours en train de jouer.
+        stopYoutubePlayer();
         updateState({ status: 'idle' });
         return;
       }
@@ -138,6 +171,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       currentTrackIdRef.current = track.id;
 
       if (!response.playback || response.playback.status === 'unresolved') {
+        // Même raison : une piste non résolue ne doit jamais laisser la précédente
+        // continuer à jouer en arrière-plan — bug observé en enchaînant deux pistes.
+        stopYoutubePlayer();
         updateState({
           status: 'unresolved',
           track,
@@ -156,6 +192,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      stopYoutubePlayer();
       updateState({
         status: 'playing_spotify',
         track,
@@ -163,7 +200,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         spotifyId: response.playback.spotifyId,
       });
     },
-    [mountYoutubePlayer],
+    [mountYoutubePlayer, stopYoutubePlayer],
   );
 
   const advanceQueue = useCallback(async () => {
@@ -299,15 +336,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   );
 
   const close = useCallback(() => {
-    playerRef.current?.destroy();
-    playerRef.current = null;
+    stopYoutubePlayer();
     currentTrackIdRef.current = null;
     updateState({ status: 'idle' });
-  }, []);
+  }, [stopYoutubePlayer]);
 
   return (
     <PlaybackContext.Provider
-      value={{ state, playTrack, playAlbum, pasteUrl, close, youtubeMountId: YOUTUBE_MOUNT_ID }}
+      value={{ state, playTrack, playAlbum, pasteUrl, close, setYoutubeContainer }}
     >
       {children}
     </PlaybackContext.Provider>
