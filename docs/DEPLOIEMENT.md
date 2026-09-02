@@ -111,15 +111,18 @@ Buildtime » pour `NODE_ENV`) fonctionne aussi, mais dépend d'une case à coche
 interface — le drapeau dans le `Dockerfile` rend le build correct quelle que soit la
 plateforme.
 
-## 4 ter. Le piège `env_file` (déjà corrigé, à ne pas réintroduire)
+## 4 ter. Comment les variables atteignent réellement les conteneurs
 
-Symptôme : Coolify échoue sur **« Failed to read Git source. Please verify repository
-access and try again. »** alors que le clone a parfaitement réussi quelques lignes plus
-haut. Le libellé est trompeur ; la trace réelle pointe `Application->loadComposeFile()`.
+Les valeurs sont saisies dans l'interface de Coolify. Coolify les transmet à Docker
+Compose, qui s'en sert pour **interpoler** le YAML (`${POSTGRES_PASSWORD}`). Mais
+interpoler ne peuple pas l'environnement des conteneurs — ce sont deux mécanismes
+distincts. Il faut le demander explicitement, service par service.
 
-Cause : `docker-compose.prod.yml` déclarait `env_file: - .env`. Or `.env` est ignoré par
-Git — il n'existe donc pas dans le dépôt fraîchement cloné au moment où Coolify parse le
-compose, et `docker compose config` sort alors en **erreur**, pas en avertissement :
+Deux formes ont été écartées, chacune pour une raison mesurée :
+
+**`env_file: - .env`** — écarté. `.env` est ignoré par Git : il est absent du dépôt
+cloné au moment où Coolify analyse le compose, et un `env_file` manquant est une
+**erreur** de `docker compose config`, pas un avertissement :
 
 ```console
 $ docker compose -f docker-compose.prod.yml config --quiet ; echo $?
@@ -127,18 +130,35 @@ env file /chemin/.env not found
 1
 ```
 
-D'où l'intermittence constatée : Coolify garde parfois le compose analysé en cache et
-passe, parfois il le relit et échoue.
+Coolify échouait alors sur « Failed to read Git source. Please verify repository access »
+— libellé trompeur, la trace réelle pointant `Application->loadComposeFile()`. Et de
+façon intermittente, Coolify gardant parfois le compose analysé en cache.
 
-Correctif : la forme longue avec `required: false`, sur les trois services.
+**`environment: { VAR: ${VAR} }`** — écarté aussi. Une variable non définie serait
+injectée comme **chaîne vide**, alors qu'un défaut Zod (`src/lib/env.ts`) ne s'applique
+qu'à `undefined`. `YOUTUBE_DAILY_QUOTA_UNITS` par exemple partirait en `z.coerce.number()`
+sur `""`, donc `0`, qui échoue `.positive()` — l'application refuserait de démarrer.
+
+**Forme retenue** : la liste de noms sans valeur, partagée par ancre YAML entre `app` et
+`worker`.
 
 ```yaml
-env_file:
-  - path: .env
-    required: false
+x-app-environment: &app-environment
+  - APP_BASE_URL
+  - DATABASE_URL
+  # ...
 ```
 
-Le fichier reste utilisé s'il existe, et son absence n'interrompt plus le parsing.
+Docker Compose transmet alors la variable si elle est définie et l'omet **totalement**
+sinon — vérifié en exécutant un conteneur, une variable non définie y est absente et non
+vide. Les défauts Zod s'appliquent donc normalement.
+
+Conséquence à retenir : **cette liste est le contrat**. Une variable présente dans
+`.env.example` mais absente du compose ne peut pas être configurée en production, quoi
+qu'on saisisse dans l'interface de Coolify. La tenir à jour avec `src/lib/env.ts`.
+
+Le service `migrate` ne reçoit que `DATABASE_URL` : `drizzle-kit migrate` ne lit rien
+d'autre.
 
 ## 5. Vérification après déploiement
 

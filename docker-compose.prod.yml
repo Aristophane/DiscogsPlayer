@@ -8,32 +8,82 @@
 # géré (domaine + certificat Let's Encrypt) depuis son interface — aucun label manuel à
 # ajouter. Voir docs/DEPLOIEMENT.md.
 #
-# Variables : toutes viennent de `.env` (non versionné, une valeur par ligne
-# `NOM=valeur`), que Coolify constitue depuis les variables d'environnement saisies dans
-# son interface pour cette ressource. Modèle et explication de chaque variable :
-# .env.example. `NODE_ENV=production` et `PROVIDERS_MODE=live` sont vérifiés au
-# démarrage (src/lib/env.ts) — le processus refuse de démarrer sinon (AUTH-003).
+# --- Comment les variables arrivent dans les conteneurs -----------------------------
+#
+# Les valeurs sont saisies dans l'interface de Coolify, jamais dans un fichier versionné.
+# Coolify les fournit à Docker Compose, qui les utilise pour l'**interpolation** de ce
+# YAML (`${POSTGRES_PASSWORD}` plus bas). Mais interpoler ne peuple pas l'environnement
+# des conteneurs : il faut le demander explicitement, ce que fait le bloc `environment`
+# de chaque service.
+#
+# La forme retenue est volontairement la liste de *noms sans valeur* : Docker Compose
+# transmet alors la variable si elle est définie, et l'omet totalement sinon — vérifié,
+# une variable absente n'arrive pas comme chaîne vide. C'est la propriété qui compte
+# ici : `src/lib/env.ts` applique ses propres valeurs par défaut via Zod, or un défaut
+# Zod ne vaut que pour `undefined`, jamais pour `""`. Écrire `${VAR}` à la place
+# injecterait une chaîne vide et casserait par exemple `YOUTUBE_DAILY_QUOTA_UNITS`
+# (`z.coerce.number()` sur `""` donne 0, qui échoue `.positive()`).
+#
+# Ne pas remplacer ce bloc par `env_file: .env` : ce fichier est ignoré par Git, donc
+# absent du dépôt cloné au moment où Coolify analyse ce compose — l'analyse échouait
+# alors sur un message trompeur (docs/DEPLOIEMENT.md §4 ter).
+#
+# Cette liste est le contrat entre Coolify et l'application : une variable de
+# `.env.example` absente d'ici ne peut pas être configurée en production, quoi qu'on
+# saisisse dans l'interface. La tenir à jour avec `src/lib/env.ts`.
+#
+# Volontairement absents : `DISCOGS_PERSONAL_TOKEN` et `FIXTURES_*`, réservés au
+# développement local — la production les refuse de toute façon (AUTH-003).
+
+x-app-environment: &app-environment
+  - NODE_ENV
+  - PORT
+  - APP_BASE_URL
+  - DATABASE_URL
+  - LOG_LEVEL
+  - SESSION_SECRET
+  - CREDENTIAL_ENCRYPTION_KEY
+  - CREDENTIAL_ENCRYPTION_KEY_VERSION
+  - SESSION_IDLE_TTL_HOURS
+  - SESSION_ABSOLUTE_TTL_HOURS
+  - DISCOGS_CONSUMER_KEY
+  - DISCOGS_CONSUMER_SECRET
+  - DISCOGS_CALLBACK_URL
+  - DISCOGS_USER_AGENT
+  - YOUTUBE_API_KEY
+  - YOUTUBE_DAILY_QUOTA_UNITS
+  - YOUTUBE_SEARCH_UNIT_COST
+  - YOUTUBE_VIDEOS_UNIT_COST
+  - YOUTUBE_SEARCH_RESERVE_UNITS
+  - YOUTUBE_QUOTA_RESET_TIMEZONE
+  - PROVIDER_METADATA_MAX_AGE_DAYS
+  - SPOTIFY_OEMBED_URL
+  - ADMIN_DISCOGS_USER_IDS
+  - WORKER_ENABLED
+  - WORKER_CONCURRENCY
+  - WORKER_POLL_INTERVAL_MS
+  - WORKER_LOCK_TIMEOUT_SECONDS
+  - RATELIMIT_PROPOSALS_PER_DAY
+  - RATELIMIT_CONFIRMATIONS_PER_DAY
+  - RATELIMIT_SYNC_PER_DAY
+  - PROVIDERS_MODE
 
 services:
   # Tâche unique, pas un serveur : applique les migrations en attente puis se termine.
   # `app` et `worker` attendent sa réussite avant de démarrer — sans ça, le worker peut
   # interroger une table pas encore créée (constaté en vérification locale : les deux
-  # services ne dépendaient que de `postgres`, qui est prêt bien avant la fin de la
-  # migration lancée par `app`). Idempotent : ne rejoue que les migrations manquantes.
+  # services ne dépendaient que de `postgres`, prêt bien avant la fin de la migration).
+  # Idempotent : ne rejoue que les migrations manquantes.
   migrate:
     build:
       context: .
       dockerfile: Dockerfile
     command: ['npm', 'run', 'db:migrate']
     restart: 'no'
-    env_file:
-      # `required: false` est indispensable, pas une précaution : Coolify parse ce fichier
-      # juste après le clone, or `.env` est ignoré par Git et n'est écrit qu'ensuite. Sans
-      # ce drapeau, `docker compose config` sort en erreur et Coolify abandonne sur un
-      # message trompeur — « Failed to read Git source. Please verify repository access »,
-      # alors que le dépôt a été cloné sans le moindre problème.
-      - path: .env
-        required: false
+    # `drizzle-kit migrate` ne lit que `DATABASE_URL` (drizzle.config.ts) : rien d'autre
+    # n'a de raison d'entrer dans ce conteneur.
+    environment:
+      - DATABASE_URL
     depends_on:
       postgres:
         condition: service_healthy
@@ -44,14 +94,7 @@ services:
       dockerfile: Dockerfile
     command: ['npm', 'run', 'start']
     restart: unless-stopped
-    env_file:
-      # `required: false` est indispensable, pas une précaution : Coolify parse ce fichier
-      # juste après le clone, or `.env` est ignoré par Git et n'est écrit qu'ensuite. Sans
-      # ce drapeau, `docker compose config` sort en erreur et Coolify abandonne sur un
-      # message trompeur — « Failed to read Git source. Please verify repository access »,
-      # alors que le dépôt a été cloné sans le moindre problème.
-      - path: .env
-        required: false
+    environment: *app-environment
     expose:
       - '3004'
     depends_on:
@@ -72,14 +115,7 @@ services:
       dockerfile: Dockerfile
     command: ['npm', 'run', 'worker:prod']
     restart: unless-stopped
-    env_file:
-      # `required: false` est indispensable, pas une précaution : Coolify parse ce fichier
-      # juste après le clone, or `.env` est ignoré par Git et n'est écrit qu'ensuite. Sans
-      # ce drapeau, `docker compose config` sort en erreur et Coolify abandonne sur un
-      # message trompeur — « Failed to read Git source. Please verify repository access »,
-      # alors que le dépôt a été cloné sans le moindre problème.
-      - path: .env
-        required: false
+    environment: *app-environment
     depends_on:
       postgres:
         condition: service_healthy
