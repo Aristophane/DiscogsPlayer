@@ -91,6 +91,26 @@ démarrage. Rejouable sans risque à chaque déploiement — seules les migratio
 encore appliquées sont jouées, jamais de ré-application ni de modification destructive
 (discipline CLAUDE.md).
 
+## 4 bis. Le piège `NODE_ENV` au build (déjà corrigé, à ne pas réintroduire)
+
+Coolify injecte **toutes** les variables d'environnement comme `--build-arg`, y compris
+`NODE_ENV=production`. Or npm, voyant `NODE_ENV=production`, **omet les
+devDependencies** : le premier déploiement a échoué sur
+`Cannot find module '@tailwindcss/postcss'`, après n'avoir installé que 61 paquets au
+lieu de 531.
+
+Le `Dockerfile` force donc `npm ci --include=dev`. Ce projet a besoin des
+devDependencies deux fois :
+
+- **pour construire** — Tailwind et TypeScript ;
+- **à l'exécution** — `tsx` fait tourner le worker, `drizzle-kit` applique les migrations.
+
+Ne pas remplacer par `npm ci --omit=dev` en croyant alléger l'image : le worker et les
+migrations cesseraient de démarrer. L'alternative côté Coolify (décocher « Available at
+Buildtime » pour `NODE_ENV`) fonctionne aussi, mais dépend d'une case à cocher dans une
+interface — le drapeau dans le `Dockerfile` rend le build correct quelle que soit la
+plateforme.
+
 ## 5. Vérification après déploiement
 
 ```bash

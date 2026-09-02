@@ -11,9 +11,14 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-# npm ci complet (avec devDependencies) : tsx et drizzle-kit sont nécessaires à l'exécution
-# en production (worker, migrations), pas seulement en développement.
-RUN npm ci
+# `--include=dev` n'est pas décoratif : la plateforme de déploiement (Coolify) injecte
+# `NODE_ENV=production` comme build-arg, ce qui pousse npm à omettre les devDependencies
+# — le build échouait alors sur `Cannot find module '@tailwindcss/postcss'` après n'avoir
+# installé que 61 paquets. Le drapeau force l'installation complète quel que soit
+# `NODE_ENV`, ce dont ce projet a besoin deux fois : pour construire (Tailwind,
+# TypeScript) et pour l'exécution même (tsx pour le worker, drizzle-kit pour les
+# migrations). Ne pas le retirer en croyant alléger l'image.
+RUN npm ci --include=dev
 
 FROM node:22-alpine AS build
 WORKDIR /app
