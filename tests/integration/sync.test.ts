@@ -6,7 +6,7 @@
  * L'adaptateur Discogs est remplacé par un double contrôlable : aucun appel réseau réel
  * (§22.3), et seule la frontière externe change — la logique métier est celle de prod.
  */
-import { and, eq, inArray, like } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { db, sql } from '@/db/client';
@@ -34,7 +34,13 @@ const TOKENS = { token: 'jeton', tokenSecret: 'secret' };
 const TEST_USER_IDS = [String(ALICE.id), String(BOB.id)];
 
 /** Identifiants d'édition réservés aux tests, faciles à nettoyer. */
+/**
+ * Ces identifiants traversent le schéma Zod de l'API Discogs, qui exige un nombre : ils
+ * ne peuvent donc pas porter de préfixe. Le nettoyage ci-dessous les énumère donc un par
+ * un plutôt que d'utiliser un motif `LIKE`, qui a déjà supprimé une édition réelle.
+ */
 const R = (n: number) => `9910${String(n).padStart(3, '0')}`;
+const ALL_TEST_RELEASE_IDS = Array.from({ length: 20 }, (_, index) => R(index + 1));
 
 function release(
   id: string,
@@ -139,8 +145,15 @@ async function cleanup() {
   }
 
   await db.delete(users).where(inArray(users.discogsUserId, TEST_USER_IDS));
-  await db.delete(discogsReleases).where(like(discogsReleases.discogsReleaseId, '9910%'));
-  await db.delete(tasks).where(like(tasks.dedupeKey, 'release:9910%'));
+  await db
+    .delete(discogsReleases)
+    .where(inArray(discogsReleases.discogsReleaseId, ALL_TEST_RELEASE_IDS));
+  await db.delete(tasks).where(
+    inArray(
+      tasks.dedupeKey,
+      ALL_TEST_RELEASE_IDS.map((id) => `release:${id}`),
+    ),
+  );
 }
 
 beforeEach(cleanup);
@@ -208,7 +221,15 @@ describe('import paginé avec doublons (§12.1, COLL-005)', () => {
     const detailTasks = await db
       .select()
       .from(tasks)
-      .where(and(eq(tasks.type, TASK_FETCH_RELEASE), like(tasks.dedupeKey, 'release:9910%')));
+      .where(
+        and(
+          eq(tasks.type, TASK_FETCH_RELEASE),
+          inArray(
+            tasks.dedupeKey,
+            ALL_TEST_RELEASE_IDS.map((id) => `release:${id}`),
+          ),
+        ),
+      );
 
     expect(detailTasks).toHaveLength(2);
   });

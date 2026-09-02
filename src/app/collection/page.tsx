@@ -2,11 +2,12 @@ import { redirect } from 'next/navigation';
 
 import { t } from '@/lib/i18n';
 import { getCurrentUser } from '@/modules/auth/current-user';
-import { countActiveInstances } from '@/modules/sync/service';
+import { CollectionBrowser } from '@/modules/collection/components/collection-browser';
+import { countCollection, listCollection, listFacets } from '@/modules/collection/service';
 
 /**
- * Collection (§7.1). Lot 2 : le compte des albums importés prouve la chaîne complète.
- * La grille de pochettes, la recherche et les filtres arrivent au Lot 3.
+ * Collection (§7.1, §7.3).
+ * La première page est rendue côté serveur (§20.1) ; l'interactivité prend le relais.
  */
 export default async function CollectionPage() {
   const user = await getCurrentUser();
@@ -14,21 +15,40 @@ export default async function CollectionPage() {
     redirect('/connexion');
   }
 
-  const count = await countActiveInstances(user.id);
+  const [page, total, facets] = await Promise.all([
+    listCollection(user.id),
+    countCollection(user.id),
+    listFacets(user.id),
+  ]);
 
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center gap-4 px-6 py-16">
-      <h1 className="text-3xl font-semibold tracking-tight">{t('collection.title')}</h1>
-      <p className="text-sm text-foreground/70">
-        {t('collection.signedInAs', { username: user.discogsUsername })}
-      </p>
-      <p className="text-lg">
-        {count === 0 ? t('collection.empty') : t('collection.count', { count })}
-      </p>
-      <div className="flex gap-4 text-sm underline">
-        <a href="/import">{t('collection.import')}</a>
-        <a href="/parametres">{t('nav.settings')}</a>
-      </div>
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8 sm:px-6">
+      <header className="flex flex-wrap items-baseline justify-between gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">{t('collection.title')}</h1>
+        <nav className="flex gap-4 text-sm underline">
+          <a href="/import">{t('collection.import')}</a>
+          <a href="/parametres">{t('nav.settings')}</a>
+        </nav>
+      </header>
+
+      {total === 0 ? (
+        <div className="flex flex-col items-start gap-3 py-16">
+          <p className="text-lg">{t('collection.empty')}</p>
+          <a
+            href="/import"
+            className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background"
+          >
+            {t('import.action.start')}
+          </a>
+        </div>
+      ) : (
+        <CollectionBrowser
+          initialItems={page.items}
+          initialCursor={page.nextCursor}
+          total={total}
+          facets={facets}
+        />
+      )}
     </main>
   );
 }

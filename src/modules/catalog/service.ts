@@ -55,6 +55,9 @@ export type ReleaseSummaryInput = {
  */
 export async function upsertReleaseSummary(input: ReleaseSummaryInput): Promise<string> {
   const artistsText = input.artists?.length ? formatArtistCredit(input.artists) : '';
+  const titleNormalized = normalizeText(input.title);
+  const artistsNormalized = normalizeText(artistsText);
+  const searchText = `${titleNormalized} ${artistsNormalized}`.trim();
 
   const rows = await db
     .insert(discogsReleases)
@@ -68,17 +71,26 @@ export async function upsertReleaseSummary(input: ReleaseSummaryInput): Promise<
       formats: input.formats ?? [],
       primaryImageUrl: input.primaryImageUrl ?? null,
       artistsText,
+      searchText,
+      titleNormalized,
+      artistsNormalized,
     })
     .onConflictDoUpdate({
       target: discogsReleases.discogsReleaseId,
       set: {
         title: input.title,
-        year: normalizeYear(input.year),
-        masterId: input.masterId ?? null,
+        // Une valeur absente ne remplace jamais une valeur connue : le résumé de
+        // collection est plus pauvre que la fiche détaillée, et certains appels ne
+        // portent ni année ni master.
+        year: sql`coalesce(${normalizeYear(input.year)}::int, ${discogsReleases.year})`,
+        masterId: sql`coalesce(${input.masterId ?? null}::text, ${discogsReleases.masterId})`,
         // `coalesce(nullif(...))` : une valeur vide venue du résumé ne remplace pas
         // une valeur déjà renseignée par le chargement détaillé.
         primaryImageUrl: sql`coalesce(${input.primaryImageUrl ?? null}, ${discogsReleases.primaryImageUrl})`,
         artistsText: sql`case when ${artistsText} = '' then ${discogsReleases.artistsText} else ${artistsText} end`,
+        searchText: sql`case when ${artistsText} = '' then ${discogsReleases.searchText} else ${searchText} end`,
+        titleNormalized,
+        artistsNormalized: sql`case when ${artistsText} = '' then ${discogsReleases.artistsNormalized} else ${artistsNormalized} end`,
         updatedAt: new Date(),
       },
     })

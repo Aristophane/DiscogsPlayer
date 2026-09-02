@@ -45,7 +45,7 @@ export default async function ConnexionPage({
         {t('signin.action')}
       </a>
 
-      <section className="flex flex-col gap-3 text-sm text-foreground/70">
+      <section className="flex flex-col gap-3 text-sm text-muted">
         <h2 className="font-medium text-foreground">{t('signin.dataTitle')}</h2>
         <ul className="flex list-disc flex-col gap-2 pl-5">
           <li>{t('signin.data.identity')}</li>

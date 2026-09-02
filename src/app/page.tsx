@@ -8,9 +8,9 @@ export default function HomePage() {
   return (
     <main className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center gap-6 px-6 py-16">
       <h1 className="text-3xl font-semibold tracking-tight">{t('app.name')}</h1>
-      <p className="text-lg text-foreground/80">{t('app.tagline')}</p>
-      <p className="text-sm text-foreground/60">{t('home.intro')}</p>
-      <p className="text-xs text-foreground/40">{t('home.status.bootstrap')}</p>
+      <p className="text-lg text-muted">{t('app.tagline')}</p>
+      <p className="text-sm text-muted">{t('home.intro')}</p>
+      <p className="text-xs text-muted">{t('home.status.bootstrap')}</p>
     </main>
   );
 }

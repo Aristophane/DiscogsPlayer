@@ -9,9 +9,33 @@
  * Forme comparable d'un texte : sans accent, sans casse, ponctuation réduite.
  * COLL-003 — « bjork » doit trouver « Björk », « Sigur Ros » trouver « Sigur Rós ».
  */
+/**
+ * Lettres que la décomposition Unicode ne sépare pas : `æ` n'est pas « a + signe », c'est
+ * une lettre à part entière. Sans cette table, « agaetis » ne trouverait pas « Ágætis ».
+ */
+const LIGATURES: Record<string, string> = {
+  æ: 'ae',
+  Æ: 'ae',
+  œ: 'oe',
+  Œ: 'oe',
+  ø: 'o',
+  Ø: 'o',
+  ß: 'ss',
+  đ: 'd',
+  Đ: 'd',
+  ð: 'd',
+  Ð: 'd',
+  þ: 'th',
+  Þ: 'th',
+  ł: 'l',
+  Ł: 'l',
+  ı: 'i',
+};
+
 export function normalizeText(value: string): string {
   return (
     value
+      .replace(/[æÆœŒøØßđĐðÐþÞłŁı]/g, (char) => LIGATURES[char] ?? char)
       .normalize('NFD')
       // Après NFD, les diacritiques sont des marques combinantes isolées.
       .replace(/\p{M}/gu, '')

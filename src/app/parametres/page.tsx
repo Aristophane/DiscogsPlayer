@@ -21,15 +21,15 @@ export default async function ParametresPage() {
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-medium">{t('settings.account')}</h2>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-          <dt className="text-foreground/60">{t('settings.account.discogs')}</dt>
+          <dt className="text-muted">{t('settings.account.discogs')}</dt>
           <dd>{user.discogsUsername}</dd>
-          <dt className="text-foreground/60">{t('settings.account.role')}</dt>
+          <dt className="text-muted">{t('settings.account.role')}</dt>
           <dd>{user.role === 'admin' ? t('settings.role.admin') : t('settings.role.user')}</dd>
         </dl>
       </section>
 
       <section className="flex flex-col gap-3">
-        <p className="text-sm text-foreground/60">{t('settings.signOut.explanation')}</p>
+        <p className="text-sm text-muted">{t('settings.signOut.explanation')}</p>
         <SignOutButton />
       </section>
     </main>

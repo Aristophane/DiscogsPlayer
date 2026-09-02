@@ -1,13 +1,27 @@
 @import 'tailwindcss';
 
+/*
+ * Palette (§20.2 : contraste WCAG AA).
+ *
+ * `--muted` est un ton plein, pas une opacité sur `--foreground` : une couleur en
+ * transparence se compose avec l'arrière-plan réel — sur une tuile grise, le texte
+ * secondaire tombait à 3,25:1 au lieu des 4,5:1 exigés. Vérifié par axe en e2e.
+ */
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* 7,0:1 sur blanc, 5,8:1 sur le gris des tuiles. */
+  --muted: #595959;
+  --surface: #e8e8e8;
+  --border: #c7c7c7;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -16,11 +30,33 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+    /* 8,9:1 sur le fond sombre, 6,4:1 sur la surface des tuiles. */
+    --muted: #a8a8a8;
+    --surface: #232323;
+    --border: #3d3d3d;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    Arial,
+    sans-serif;
+}
+
+/* §20.2 : réduction des animations à la demande de l'utilisateur. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

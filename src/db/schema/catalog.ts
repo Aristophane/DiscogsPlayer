@@ -45,6 +45,18 @@ export const discogsReleases = pgTable(
     primaryImageUrl: text('primary_image_url'),
     /** Artistes aplatis, pour la recherche textuelle sans jointure (§10.2). */
     artistsText: text('artists_text').notNull().default(''),
+    /**
+     * Titre et artistes normalisés, concaténés : la recherche textuelle porte sur cette
+     * colonne pour que « bjork » trouve « Björk » sans jointure (COLL-002, COLL-003).
+     */
+    searchText: text('search_text').notNull().default(''),
+    /**
+     * Titre et artistes normalisés séparément : la base est en collation `en_US.utf8`,
+     * où « Ágætis » se trie après « Zoo ». Trier sur ces colonnes rend l'ordre
+     * alphabétique conforme à ce qu'attend un lecteur francophone (§8.3).
+     */
+    titleNormalized: text('title_normalized').notNull().default(''),
+    artistsNormalized: text('artists_normalized').notNull().default(''),
     rawSourceUpdatedAt: timestamp('raw_source_updated_at', { withTimezone: true }),
     /** `null` tant que seul le résumé de collection a été vu ; pilote la fraîcheur. */
     detailsFetchedAt: timestamp('details_fetched_at', { withTimezone: true }),
@@ -57,6 +69,8 @@ export const discogsReleases = pgTable(
     index('discogs_releases_genres_idx').using('gin', table.genres),
     index('discogs_releases_styles_idx').using('gin', table.styles),
     index('discogs_releases_details_fetched_at_idx').on(table.detailsFetchedAt),
+    // Trigrammes : une recherche « contient » reste rapide sans préfixe imposé.
+    index('discogs_releases_search_text_idx').using('gin', sql`${table.searchText} gin_trgm_ops`),
   ],
 );
 

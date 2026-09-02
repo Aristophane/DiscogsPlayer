@@ -136,15 +136,57 @@ Un défaut de mes propres tests a aussi été corrigé au passage : leur nettoya
 toutes les tâches `discogs.%`, y compris celles d'un import réel en cours. Le nettoyage est
 désormais strictement limité aux données de test.
 
+## Lot 3 — expérience Collection, terminé le 2026-09-02
+
+| Livrable                              | Emplacement                                | Vérification                      |
+| ------------------------------------- | ------------------------------------------ | --------------------------------- |
+| Grille mobile-first, 2 à 6 colonnes   | `src/modules/collection/components/`       | captures mobile/tablette/desktop  |
+| Recherche accent- et casse-insensible | `src/db/schema/catalog.ts`, `normalize.ts` | vérifiée sur la vraie collection  |
+| Filtres Genre/Style avec facettes     | `collection-browser.tsx`                   | OU intra-type, ET inter-type      |
+| Tri (ajout, artiste, titre, année)    | `src/modules/collection/service.ts`        | tri linguistique, pas par octets  |
+| Pagination par curseur                | `src/modules/collection/cursor.ts`         | parcours complet sans doublon     |
+| Proxy d'images Discogs (G-03)         | `src/app/api/images/[...path]/`            | 4 défenses testées en HTTP        |
+| Fiche album                           | `src/app/sorties/[releaseId]/`             | pistes, headings, durées, formats |
+| États vide/chargement/erreur/404      | `src/app/not-found.tsx`, `error.tsx`       | rendus vérifiés                   |
+| Accessibilité WCAG AA                 | `src/app/globals.css`                      | axe : 0 violation sérieuse        |
+
+**Critère de sortie atteint** : `npx playwright test` passe 18 tests sur trois tailles
+d'écran (mobile 390px, tablette 820px, desktop), axe ne relève aucune violation critique ou
+sérieuse, et les captures sont jointes au rapport Playwright. 136 tests unitaires et
+d'intégration au total.
+
+### Ce que les données réelles ont appris
+
+- `æ`, `œ`, `ø`, `ß` ne sont **pas** décomposés par Unicode NFD : « agaetis » ne trouvait
+  pas « Ágætis Byrjun ». Une table de correspondance explicite complète la normalisation.
+- La base est en collation `en_US.utf8`, où « Ágætis » se trie **après** « Zoo ». Le tri
+  porte donc sur des colonnes normalisées.
+- Le texte secondaire en opacité tombait à 3,25:1 de contraste au lieu de 4,5:1 (§20.2).
+- Les URL d'images Discogs contiennent des segments comme `rs:fit` : les percent-encoder
+  casse la requête. Le proxy les valide sans les ré-encoder.
+- Une image qui échoue **avant l'hydratation** React perd son événement `error` : le repli
+  « Pochette indisponible » est aussi vérifié après hydratation.
+
+### Deux incidents sur la base de développement
+
+Tous deux corrigés, et à connaître car ils qualifient la discipline de test :
+
+1. Le worker local consommait les tâches créées par les tests d'intégration.
+2. Un nettoyage de test `like '9920%'` a supprimé **une édition réelle** de la collection —
+   les identifiants Discogs sont des nombres à sept chiffres. La collection a été restaurée
+   par une resynchronisation (351 albums).
+
+Résolution (ADR-0005) : base `discogs_player_test` dédiée, créée automatiquement avant les
+tests, et espaces de noms disjoints — préfixe `test-` ou énumération exacte, jamais un
+motif qui pourrait désigner une donnée réelle.
+
 ## Ordonnancement conseillé ensuite
 
 L'ordre des lots de §24 est bon, avec deux ajustements issus de l'analyse :
 
-- **G-17 (lecteur persistant) est traité au Lot 3**, pas au Lot 6 : le lecteur doit être
-  monté dans le layout racine dès la mise en place de la navigation, sinon le Lot 6 impose
-  une refonte de l'arborescence des composants.
-- **G-03 (proxy d'images)** est une dépendance du Lot 3 : sans lui, la grille de pochettes
-  peut ne rien afficher en production.
+- ~~**G-17 (lecteur persistant) est traité au Lot 3**~~ — **fait dès le Lot 0** : le
+  lecteur est monté dans le layout racine.
+- ~~**G-03 (proxy d'images)** est une dépendance du Lot 3~~ — **fait au Lot 3**.
 
 Les lots 1, 2, 3, 4 sont réalisables sans aucune clé réelle grâce à `PROVIDERS_MODE=fixtures`.
 Les clés Discogs ne deviennent nécessaires que pour valider le Lot 1 contre le vrai service ;
