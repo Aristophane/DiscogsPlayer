@@ -180,6 +180,49 @@ Résolution (ADR-0005) : base `discogs_player_test` dédiée, créée automatiqu
 tests, et espaces de noms disjoints — préfixe `test-` ou énumération exacte, jamais un
 motif qui pourrait désigner une donnée réelle.
 
+## Décisions produit : accueil, Radio, Spotify (2026-09-02)
+
+Discussion hors-lots sur les chemins de l'application, consignée dans ADR-0006 et
+`docs/LECTURE-FOURNISSEURS.md`. Trois décisions validées :
+
+1. **Accueil connecté à trois entrées** — Collection, Aléatoire, Radio — plutôt qu'une
+   redirection directe vers la grille (amende §7.1).
+2. **Le mode Radio amende RAND-006 et PLAY-007** : y entrer est une demande de lecture
+   explicite, donc le lecteur démarre. Le mode Aléatoire, lui, reste silencieux — ces deux
+   exigences continuent de s'appliquer telles quelles au tirage. La Radio tire d'abord
+   parmi les pistes déjà résolues (1409 vidéos Discogs connues sur la collection de test),
+   ce qui la rend utilisable à quota YouTube nul.
+3. **Connexion Spotify à l'onboarding, sans OAuth** — un simple lien vers
+   `open.spotify.com`, facultatif et rejouable. Aucun jeton reçu : l'Embed se fie à la
+   session du navigateur, pas à une intégration OAuth (non-objectif §3.2 préservé).
+
+`SPECIFICATION.md` devra être mise à jour sur RAND-006, PLAY-007, §6.1 et §7.1 ; en
+attendant, ADR-0006 prévaut (hiérarchie CLAUDE.md).
+
+## Lot 4 — Aléatoire, terminé le 2026-09-02
+
+| Livrable                                    | Emplacement                               | Vérification                      |
+| ------------------------------------------- | ----------------------------------------- | --------------------------------- |
+| Sessions et tirages                         | `src/db/schema/random.ts`                 | migration `0004`, unicité en base |
+| Service de tirage (SQL porte les garanties) | `src/modules/random/service.ts`           | 16 tests d'intégration            |
+| Routes `/api/random-sessions*`              | `src/app/api/random-sessions/`            | testées avec session réelle       |
+| Écran `/aleatoire`                          | `src/app/aleatoire/`, `random-drawer.tsx` | filtres, tirage, épuisement       |
+| Accueil à trois entrées (ADR-0006)          | `src/app/page.tsx`                        | Radio annoncée, désactivée        |
+
+**Critère de sortie atteint** : `tests/integration/random.test.ts` prouve l'absence de
+répétition (unicité `(session, édition)` en base, pas une vérification applicative) et
+l'absence de pondération par exemplaires — vérifié à la fois de façon déterministe (un
+album à 3 exemplaires ne sort qu'une fois par session) et statistiquement (sur 60 sessions,
+sa fréquence en première position reste dans la fourchette attendue sans pondération).
+`tests/e2e/random.spec.ts` vérifie en plus, dans un vrai navigateur, qu'**aucun `<iframe>`
+n'apparaît après un tirage** — la preuve concrète de RAND-006 côté interface. 30 tests e2e
+sur mobile/tablette/desktop, trois passes consécutives sans instabilité. 152 tests au total.
+
+Les quatre garanties difficiles (RAND-001, 002, 003, 005) sont portées par le SQL — clause
+`exists` plutôt que `join` pour ne pas pondérer par exemplaire, index unique
+`(session_id, release_id)` pour interdire la répétition — et non par une vérification
+applicative qui pourrait être contournée par un appel concurrent.
+
 ## Ordonnancement conseillé ensuite
 
 L'ordre des lots de §24 est bon, avec deux ajustements issus de l'analyse :

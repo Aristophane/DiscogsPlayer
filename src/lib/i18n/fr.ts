@@ -112,6 +112,32 @@ export const fr = {
   'collection.import': 'Voir l’import',
   'collection.signedInAs': 'Connecté en tant que {username}.',
 
+  // Accueil connecté (ADR-0006)
+  'home.hub.title': 'Que voulez-vous écouter ?',
+  'home.hub.collection': 'Collection',
+  'home.hub.collection.hint': 'Parcourir vos {count} albums',
+  'home.hub.random': 'Aléatoire',
+  'home.hub.random.hint': 'Tirer un album au hasard',
+  'home.hub.radio': 'Radio',
+  'home.hub.radio.hint': 'Lecture continue par genre',
+  'home.hub.radio.soon': 'Disponible une fois la lecture en place',
+
+  // Aléatoire (§8.4)
+  'random.title': 'Aléatoire',
+  'random.filters.title': 'Filtrer le tirage',
+  'random.filters.none': 'Toute la collection',
+  'random.eligible': '{count} album(s) éligible(s)',
+  'random.draw': 'Tirer un album',
+  'random.drawAgain': 'Tirer un autre album',
+  'random.progress': '{drawn} sur {total} vus dans cette session',
+  'random.exhausted.title': 'Vous avez vu tous les albums éligibles.',
+  'random.exhausted.hint': 'Recommencez une session pour repartir de zéro.',
+  'random.restart': 'Recommencer une session',
+  'random.empty': 'Aucun album ne correspond à ces filtres.',
+  'random.open': 'Ouvrir la fiche',
+  'random.noAutoplay': 'Le tirage n’ouvre aucun lecteur : à vous de choisir une piste.',
+  'random.error': 'Le tirage a échoué. Réessayez.',
+
   'error.generic': 'Une erreur est survenue. Réessayez dans un instant.',
   'error.notFound': 'Cette page n’existe pas.',
 } as const;

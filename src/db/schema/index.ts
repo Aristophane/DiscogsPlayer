@@ -5,4 +5,5 @@
 export * from './auth';
 export * from './catalog';
 export * from './collection';
+export * from './random';
 export * from './tasks';
