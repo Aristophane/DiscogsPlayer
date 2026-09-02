@@ -160,6 +160,43 @@ qu'on saisisse dans l'interface de Coolify. La tenir à jour avec `src/lib/env.t
 Le service `migrate` ne reçoit que `DATABASE_URL` : `drizzle-kit migrate` ne lit rien
 d'autre.
 
+## 4 quater. « Failed to read Git source » — un piège côté serveur, pas côté dépôt
+
+Symptôme : Coolify échoue sur **« Failed to read Git source. Please verify repository
+access and try again. »** alors que, dans le log lui-même, `git ls-remote` puis
+`git clone` réussissent quelques lignes plus haut. Le dépôt est public et accessible.
+
+Le message ne vient pas de la lecture du compose : `loadComposeFile()` commence par
+appeler `getGitRemoteStatus()`, qui lance son propre `git ls-remote` **sur l'hôte, en
+root** (`exec_in_docker: false`) — et non dans le conteneur d'aide dont on voit le
+succès dans le log. C'est ce contrôle-là qui échoue.
+
+Cause : sur cet hôte (Ubuntu, git 2.43), le protocole git v2 en **HTTP/2** obtient un
+`401` de GitHub sur la seconde requête, alors que la première passe :
+
+| Requête                 | Protocole | Réponse                                        |
+| ----------------------- | --------- | ---------------------------------------------- |
+| `GET /info/refs`        | HTTP/2    | 200                                            |
+| `POST /git-upload-pack` | HTTP/2    | 401 + `www-authenticate: Basic realm="GitHub"` |
+
+Git en conclut qu'il lui faut des identifiants, demande un `Username`, n'a pas de
+terminal, et échoue — sur un dépôt pourtant public.
+
+Correctif, à appliquer **sur le serveur**, pas dans ce dépôt :
+
+```bash
+sudo -i git config --global http.version HTTP/1.1
+sudo -i git ls-remote <url du dépôt> refs/heads/master   # doit afficher la SHA
+```
+
+`sudo -i` est nécessaire : sans lui, `--global` écrit dans le `.gitconfig` de
+l'utilisateur courant, que Coolify (qui opère en root) ne lit pas.
+
+À noter : Coolify force déjà `-c http.version=HTTP/1.1` sur son `git clone`, mais pas
+sur le `ls-remote` de ce contrôle préalable. D'où un clone qui réussit et un contrôle
+qui échoue dans le même déploiement — l'incohérence qui rend le diagnostic si
+déroutant.
+
 ## 5. Vérification après déploiement
 
 ```bash
