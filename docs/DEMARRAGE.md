@@ -73,6 +73,33 @@ connexions — l'application échouait alors sur un utilisateur `discogs` inexis
 message d'erreur en français qui a trahi l'origine. Décaler le conteneur sur 5433 évite de
 toucher à l'installation existante ; `DATABASE_URL` pointe sur 5433.
 
+## Lot 1 — identité Discogs, terminé le 2026-09-02
+
+| Livrable                                          | Emplacement                            | Vérification                                    |
+| ------------------------------------------------- | -------------------------------------- | ----------------------------------------------- |
+| Schéma identité (4 tables)                        | `src/db/schema/auth.ts`                | migration `0000` appliquée                      |
+| Chiffrement AES-256-GCM versionné                 | `src/modules/auth/crypto.ts`           | 9 tests, altération détectée                    |
+| Client OAuth 1.0a Discogs                         | `src/modules/auth/discogs-oauth.ts`    | `302` réel vers Discogs ✓                       |
+| Sessions opaques, double borne                    | `src/modules/auth/sessions.ts`         | révocation et expirations testées               |
+| Service compte / rôles / jetons                   | `src/modules/auth/service.ts`          | upsert idempotent, rôle admin par configuration |
+| Garde `requireUser` / `requireAdmin`              | `src/modules/auth/current-user.ts`     | `/api/me` → `401` sans session ✓                |
+| Routes `start`, `callback`, `logout`, `me`        | `src/app/api/auth/`, `src/app/api/me/` | testées en HTTP                                 |
+| Protection CSRF par origine                       | `src/modules/auth/cookies.ts`          | `403` sans `Origin` et sur origine étrangère ✓  |
+| Écrans `/connexion`, `/parametres`, `/collection` | `src/app/`                             | rendus, aucune chaîne en dur                    |
+
+**Critère de sortie du lot atteint** : `tests/integration/auth.test.ts` prouve que deux
+comptes simulés restent isolés (sessions et jetons distincts, révocation sans effet croisé)
+et qu'une session révoquée, expirée, inactive ou rattachée à un compte supprimé ne résout
+plus rien. 40 tests au total, rejouables.
+
+Décisions consignées dans ADR-0003 : signature `PLAINTEXT`, request token en base à usage
+unique, session opaque à double expiration, rôle admin par configuration.
+
+**Reste à faire par un humain** : dérouler une vraie autorisation dans le navigateur.
+`/api/auth/discogs/start` a été vérifié contre le service réel (redirection `302` et secret
+chiffré en base), mais le callback exige de cliquer « Autoriser » sur discogs.com. Ouvrir
+<http://localhost:3004/connexion> et se connecter suffit à le valider.
+
 ## Ordonnancement conseillé ensuite
 
 L'ordre des lots de §24 est bon, avec deux ajustements issus de l'analyse :
