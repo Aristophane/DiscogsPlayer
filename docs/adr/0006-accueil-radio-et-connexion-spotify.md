@@ -101,3 +101,15 @@ Trois honnêtetés obligatoires dans l'interface (§14.7) :
   une validation Spotify incertaine.
 - **Étape Spotify bloquante à l'onboarding** : ajoute de la friction au parcours dont la
   raison d'être est précisément de la supprimer.
+
+### Addendum (2026-09-02) — Web Playback SDK explicitement reporté
+
+Question posée après coup : un OAuth Spotify ne permettrait-il pas un vrai lecteur intégré
+plutôt que l'Embed ? Réponse : si, via le *Web Playback SDK* — mais ce n'est pas « OAuth »
+au sens où le point 4 ci-dessus l'écarte (un simple lien de connexion sans jeton). Le SDK
+exige un OAuth complet, un compte **Premium** (le SDK ne fonctionne pas du tout sur un
+compte gratuit), une application développeur déclarée, et surtout l'**Extended Quota Mode**
+de Spotify pour dépasser 25 utilisateurs — une revue manuelle à l'issue incertaine.
+
+Décision : reporté, pas écarté. Détail dans `docs/LECTURE-FOURNISSEURS.md` §2, sous-section
+Spotify. Reconsidérer si Spotify devient central au produit (§25.2).
