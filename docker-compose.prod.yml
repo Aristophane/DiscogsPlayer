@@ -27,7 +27,13 @@ services:
     command: ['npm', 'run', 'db:migrate']
     restart: 'no'
     env_file:
-      - .env
+      # `required: false` est indispensable, pas une précaution : Coolify parse ce fichier
+      # juste après le clone, or `.env` est ignoré par Git et n'est écrit qu'ensuite. Sans
+      # ce drapeau, `docker compose config` sort en erreur et Coolify abandonne sur un
+      # message trompeur — « Failed to read Git source. Please verify repository access »,
+      # alors que le dépôt a été cloné sans le moindre problème.
+      - path: .env
+        required: false
     depends_on:
       postgres:
         condition: service_healthy
@@ -39,7 +45,13 @@ services:
     command: ['npm', 'run', 'start']
     restart: unless-stopped
     env_file:
-      - .env
+      # `required: false` est indispensable, pas une précaution : Coolify parse ce fichier
+      # juste après le clone, or `.env` est ignoré par Git et n'est écrit qu'ensuite. Sans
+      # ce drapeau, `docker compose config` sort en erreur et Coolify abandonne sur un
+      # message trompeur — « Failed to read Git source. Please verify repository access »,
+      # alors que le dépôt a été cloné sans le moindre problème.
+      - path: .env
+        required: false
     expose:
       - '3004'
     depends_on:
@@ -61,7 +73,13 @@ services:
     command: ['npm', 'run', 'worker:prod']
     restart: unless-stopped
     env_file:
-      - .env
+      # `required: false` est indispensable, pas une précaution : Coolify parse ce fichier
+      # juste après le clone, or `.env` est ignoré par Git et n'est écrit qu'ensuite. Sans
+      # ce drapeau, `docker compose config` sort en erreur et Coolify abandonne sur un
+      # message trompeur — « Failed to read Git source. Please verify repository access »,
+      # alors que le dépôt a été cloné sans le moindre problème.
+      - path: .env
+        required: false
     depends_on:
       postgres:
         condition: service_healthy

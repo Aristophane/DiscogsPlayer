@@ -111,6 +111,35 @@ Buildtime » pour `NODE_ENV`) fonctionne aussi, mais dépend d'une case à coche
 interface — le drapeau dans le `Dockerfile` rend le build correct quelle que soit la
 plateforme.
 
+## 4 ter. Le piège `env_file` (déjà corrigé, à ne pas réintroduire)
+
+Symptôme : Coolify échoue sur **« Failed to read Git source. Please verify repository
+access and try again. »** alors que le clone a parfaitement réussi quelques lignes plus
+haut. Le libellé est trompeur ; la trace réelle pointe `Application->loadComposeFile()`.
+
+Cause : `docker-compose.prod.yml` déclarait `env_file: - .env`. Or `.env` est ignoré par
+Git — il n'existe donc pas dans le dépôt fraîchement cloné au moment où Coolify parse le
+compose, et `docker compose config` sort alors en **erreur**, pas en avertissement :
+
+```console
+$ docker compose -f docker-compose.prod.yml config --quiet ; echo $?
+env file /chemin/.env not found
+1
+```
+
+D'où l'intermittence constatée : Coolify garde parfois le compose analysé en cache et
+passe, parfois il le relit et échoue.
+
+Correctif : la forme longue avec `required: false`, sur les trois services.
+
+```yaml
+env_file:
+  - path: .env
+    required: false
+```
+
+Le fichier reste utilisé s'il existe, et son absence n'interrompt plus le parsing.
+
 ## 5. Vérification après déploiement
 
 ```bash
