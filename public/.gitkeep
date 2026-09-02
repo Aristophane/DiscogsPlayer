@@ -1,0 +1,8 @@
+Ce fichier n'a qu'un rôle : garantir que `public/` existe dans tout clone du dépôt.
+
+Git n'enregistre pas les dossiers vides. Sans ce fichier, `public/` est absent d'un
+clone frais, et le `COPY --from=build /app/public ./public` du Dockerfile échoue sur
+« /app/public: not found » — défaut invisible en local, où le dossier existe sur le
+disque de travail. Constaté en déploiement réel.
+
+À supprimer sans crainte dès que le dossier contiendra de vrais fichiers statiques.
