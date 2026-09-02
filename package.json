@@ -6,7 +6,7 @@
     "dev": "next dev -p 3004",
     "build": "next build",
     "start": "next start -p 3004",
-    "worker": "node --env-file=.env.local --experimental-strip-types src/worker/main.ts",
+    "worker": "tsx --env-file=.env.local src/worker/main.ts",
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -45,6 +45,7 @@
     "jsdom": "^27.0.1",
     "prettier": "^3.9.6",
     "tailwindcss": "^4",
+    "tsx": "^4.23.13",
     "typescript": "^5",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.1.11"

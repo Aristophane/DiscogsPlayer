@@ -8,6 +8,13 @@
       "when": 1788307024656,
       "tag": "0000_sour_scorpion",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788344354310,
+      "tag": "0001_secret_venom",
+      "breakpoints": true
     }
   ]
 }

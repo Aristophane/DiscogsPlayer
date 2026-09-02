@@ -44,8 +44,30 @@ export const fr = {
   'settings.signOut.pending': 'Déconnexion…',
   'settings.signOut.failed': 'La déconnexion a échoué. Réessayez.',
 
+  // Import (§6.1, §7.1 `/import`, §12.3 : des états compréhensibles)
+  'import.title': 'Import de votre collection',
+  'import.status.queued': 'En attente de démarrage…',
+  'import.status.running': 'Import en cours…',
+  'import.status.completed': 'Import terminé.',
+  'import.status.failed': 'L’import s’est interrompu.',
+  'import.status.cancelled': 'Import annulé.',
+  'import.progress.pages': 'Page {processed} sur {total}',
+  'import.progress.pagesUnknown': '{processed} page(s) traitée(s)',
+  'import.progress.items': '{count} album(s) importé(s)',
+  'import.action.start': 'Synchroniser maintenant',
+  'import.action.retry': 'Relancer l’import',
+  'import.action.browse': 'Voir les albums déjà disponibles',
+  'import.explanation':
+    'Vous pouvez consulter les premiers albums pendant que l’import se poursuit.',
+  'import.error.retryable':
+    'Discogs a ralenti ou refusé une page. L’import reprendra là où il s’est arrêté.',
+  'import.never': 'Aucun import n’a encore été lancé.',
+
   'collection.title': 'Collection',
-  'collection.pending': 'L’import de votre collection arrive au lot suivant.',
+  'collection.empty': 'Votre collection est vide pour le moment.',
+  'collection.count': '{count} album(s) dans votre collection.',
+  'collection.sync': 'Synchroniser',
+  'collection.import': 'Voir l’import',
   'collection.signedInAs': 'Connecté en tant que {username}.',
 
   'error.generic': 'Une erreur est survenue. Réessayez dans un instant.',

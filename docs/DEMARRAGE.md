@@ -100,6 +100,42 @@ unique, session opaque à double expiration, rôle admin par configuration.
 chiffré en base), mais le callback exige de cliquer « Autoriser » sur discogs.com. Ouvrir
 <http://localhost:3004/connexion> et se connecter suffit à le valider.
 
+## Lot 2 — import et catalogue, terminé le 2026-09-02
+
+| Livrable                             | Emplacement                                   | Vérification                        |
+| ------------------------------------ | --------------------------------------------- | ----------------------------------- |
+| Schéma catalogue, collection, tâches | `src/db/schema/{catalog,collection,tasks}.ts` | migration `0001`, 12 tables         |
+| File `FOR UPDATE SKIP LOCKED`        | `src/modules/sync/queue.ts`                   | 12 tests, concurrence prouvée       |
+| Régulateur de débit Discogs          | `src/modules/sync/pacer.ts`                   | 5 tests + import réel sans `429`    |
+| Client Discogs validé Zod            | `src/modules/sync/discogs-api.ts`             | erreurs typées, jamais de page vide |
+| Algorithme d'import et reprise       | `src/modules/sync/service.ts`                 | 12 tests d'intégration              |
+| Catalogue : pistes, artistes, vidéos | `src/modules/catalog/`                        | 24 tests unitaires                  |
+| Worker complet                       | `src/worker/main.ts`                          | a drainé 295 tâches sans échec      |
+| Routes `/api/sync-runs*`             | `src/app/api/sync-runs/`                      | testées avec session réelle         |
+| Écran de progression `/import`       | `src/app/import/`                             | sondage arrêté hors import actif    |
+
+**Critère de sortie atteint** : `tests/integration/sync.test.ts` prouve l'import paginé
+avec doublons, la reprise exacte après une page en erreur (seule la page interrompue est
+redemandée), et l'absence de désactivation prématurée. 100 tests au total.
+
+### Import réel de la collection de test
+
+351 albums, 4 pages, 3340 pistes, 355 artistes, 1409 vidéos Discogs — ces dernières
+alimenteront gratuitement la résolution YouTube du Lot 6, avant tout appel d'API.
+
+Deux enseignements que seule la vraie collection pouvait donner :
+
+- **Sans cadence, 295 des 351 chargements de détail ont été refusés** (`429`). Le backoff
+  les rattrapait, mais l'import devenait long. Le régulateur (ADR-0004) ramène ce chiffre à
+  zéro : 295 tâches, une tentative chacune.
+- **58 éditions (16 %) portaient `year = 0`** — la façon dont Discogs code une année
+  inconnue. Stocké tel quel, cela afficherait « 0 » dans la fiche album. Corrigé dans le
+  code et dans les données existantes.
+
+Un défaut de mes propres tests a aussi été corrigé au passage : leur nettoyage supprimait
+toutes les tâches `discogs.%`, y compris celles d'un import réel en cours. Le nettoyage est
+désormais strictement limité aux données de test.
+
 ## Ordonnancement conseillé ensuite
 
 L'ordre des lots de §24 est bon, avec deux ajustements issus de l'analyse :
