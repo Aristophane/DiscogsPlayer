@@ -197,6 +197,33 @@ sur le `ls-remote` de ce contrôle préalable. D'où un clone qui réussit et un
 qui échoue dans le même déploiement — l'incohérence qui rend le diagnostic si
 déroutant.
 
+## 4 quinquies. Vérifier depuis un clone, jamais depuis le répertoire de travail
+
+Le build a échoué en déploiement sur `COPY --from=build /app/public ./public` —
+« /app/public: not found » — alors qu'il passait en local. Cause : `public/` était
+vide, et **git n'enregistre pas les dossiers vides**. Il existait sur le disque de
+travail, donc dans le contexte de build local, mais était absent de tout clone.
+
+Corrigé par `public/.gitkeep`, à supprimer le jour où le dossier contiendra de vrais
+fichiers statiques.
+
+La leçon de méthode compte davantage que le correctif : **construire l'image depuis le
+répertoire de travail ne prouve rien sur le déploiement**, puisque la plateforme
+construit depuis un clone qui ne contient que les fichiers versionnés. Toute
+vérification sérieuse passe donc par un clone frais :
+
+```bash
+git clone --depth=1 file://$PWD /tmp/verif && cd /tmp/verif
+
+# reproduire aussi l'injection d'ARG que fait Coolify (§4 bis)
+sed 's/^FROM node:22-alpine AS \(.*\)$/FROM node:22-alpine AS 
+ARG NODE_ENV/'   Dockerfile > Dockerfile.coolify
+docker build -f Dockerfile.coolify --build-arg NODE_ENV=production -t verif .
+```
+
+Cette procédure aurait détecté ce défaut, ainsi que celui du §4 bis, avant tout
+déploiement.
+
 ## 5. Vérification après déploiement
 
 ```bash
