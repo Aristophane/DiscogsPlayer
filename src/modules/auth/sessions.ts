@@ -32,6 +32,8 @@ export type SessionUser = {
   role: 'user' | 'admin';
   contributionStatus: 'active' | 'limited' | 'suspended';
   locale: string;
+  /** ADR-0006 : préférence de recherche Spotify, jamais un OAuth. */
+  spotifyEnabled: 'unset' | 'yes' | 'no';
 };
 
 export type CreatedSession = {
@@ -79,6 +81,7 @@ export async function resolveSession(token: string, now = new Date()): Promise<S
         role: users.role,
         contributionStatus: users.contributionStatus,
         locale: users.locale,
+        spotifyEnabled: users.spotifyEnabled,
         deletedAt: users.deletedAt,
       },
     })
@@ -114,6 +117,7 @@ export async function resolveSession(token: string, now = new Date()): Promise<S
     role: row.user.role,
     contributionStatus: row.user.contributionStatus,
     locale: row.user.locale,
+    spotifyEnabled: row.user.spotifyEnabled,
   };
 }
 

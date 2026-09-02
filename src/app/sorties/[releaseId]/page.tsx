@@ -9,13 +9,14 @@ import {
 } from '@/modules/catalog/release-service';
 import { AlbumCover } from '@/modules/collection/components/album-cover';
 import { coverProxyUrl } from '@/modules/collection/cover';
+import { PlayButton } from '@/modules/playback/components/play-button';
 
 /**
  * Fiche album (§7.4).
  *
- * Aucune résolution de média n'est déclenchée ici : la page n'affiche que ce qui est
- * **déjà connu** (§4.2, SPEC-GAPS section D). Le choix d'une piste, au Lot 6, sera le seul
- * déclencheur d'une recherche.
+ * Aucune résolution de média n'est déclenchée par l'affichage de cette page (§4.2) : elle
+ * ne montre que ce qui est déjà connu. La résolution n'a lieu qu'au clic sur un bouton
+ * play — album (première piste) ou piste précise — géré par `PlaybackProvider`.
  */
 export default async function ReleasePage({ params }: { params: Promise<{ releaseId: string }> }) {
   const user = await getCurrentUser();
@@ -41,8 +42,14 @@ export default async function ReleasePage({ params }: { params: Promise<{ releas
       </a>
 
       <header className="flex flex-col gap-6 sm:flex-row sm:items-start">
-        <div className="aspect-square w-full max-w-xs shrink-0 overflow-hidden rounded-lg bg-surface">
+        <div className="relative aspect-square w-full max-w-xs shrink-0 overflow-hidden rounded-lg bg-surface">
           <AlbumCover src={cover} title={release.title} artists={release.artists} eager />
+          <PlayButton
+            kind="album"
+            id={release.discogsReleaseId}
+            size="md"
+            className="absolute bottom-2 right-2 shadow-sm"
+          />
         </div>
 
         <div className="flex flex-col gap-2">
@@ -92,16 +99,6 @@ export default async function ReleasePage({ params }: { params: Promise<{ releas
         </div>
       </header>
 
-      <section className="flex flex-col gap-2">
-        <h2 className="text-lg font-medium">{t('release.availability')}</h2>
-        <p className="text-sm text-muted">
-          {release.knownVideoCount > 0
-            ? t('release.availability.youtube.known', { count: release.knownVideoCount })
-            : t('release.availability.youtube.none')}
-        </p>
-        <p className="text-sm text-muted">{t('release.availability.pending')}</p>
-      </section>
-
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-medium">{t('release.tracklist')}</h2>
 
@@ -115,7 +112,8 @@ export default async function ReleasePage({ params }: { params: Promise<{ releas
                   {track.title}
                 </li>
               ) : (
-                <li key={track.id} className="flex items-baseline gap-3 py-2">
+                <li key={track.id} className="flex items-center gap-3 py-2">
+                  <PlayButton kind="track" id={track.id} size="sm" />
                   <span className="w-10 shrink-0 text-xs text-muted">{track.position}</span>
                   <span className="flex-1">{track.title}</span>
                   <span className="text-xs text-muted">

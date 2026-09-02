@@ -3,10 +3,11 @@ import { redirect } from 'next/navigation';
 import { t } from '@/lib/i18n';
 import { getCurrentUser } from '@/modules/auth/current-user';
 import { SignOutButton } from '@/modules/auth/components/sign-out-button';
+import { SpotifyPreferenceToggle } from '@/modules/auth/components/spotify-preference';
 
 /**
- * Paramètres (§7.1). Lot 1 : compte et déconnexion.
- * Synchronisation, confidentialité et suppression du compte arrivent aux lots 2 et 8.
+ * Paramètres (§7.1). Compte, déconnexion, préférence Spotify (ADR-0006).
+ * Synchronisation, confidentialité et suppression du compte arrivent au Lot 8.
  */
 export default async function ParametresPage() {
   const user = await getCurrentUser();
@@ -27,6 +28,8 @@ export default async function ParametresPage() {
           <dd>{user.role === 'admin' ? t('settings.role.admin') : t('settings.role.user')}</dd>
         </dl>
       </section>
+
+      <SpotifyPreferenceToggle initial={user.spotifyEnabled} variant="settings" />
 
       <section className="flex flex-col gap-3">
         <p className="text-sm text-muted">{t('settings.signOut.explanation')}</p>

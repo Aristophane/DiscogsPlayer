@@ -193,13 +193,17 @@ test('la fiche album est accessible et navigable au clavier', async ({ page }, t
   await expect(page.getByRole('heading', { name: 'Ágætis Byrjun', level: 1 })).toBeVisible();
   await expect(page.getByText('Sigur Rós')).toBeVisible();
 
-  // §4.2 : la fiche n'annonce que ce qui est déjà connu, sans déclencher de résolution.
-  await expect(page.getByText('Aucune vidéo connue pour le moment')).toBeVisible();
+  // §4.2 : la fiche n'affiche que ce qui est déjà connu et ne déclenche aucune
+  // résolution — le bouton play est présent, mais rien n'est joué avant qu'on y clique
+  // (Lot 6 : le bloc de texte "Disponibilité" a été retiré au profit de ce bouton).
+  await expect(page.getByRole('button', { name: 'Lire l’album' })).toBeVisible();
 
   await expectNoCriticalViolations(page, 'fiche album');
 
-  // §20.2 : navigation complète au clavier, avec focus visible.
-  await page.keyboard.press('Tab');
+  // §20.2 : navigation complète au clavier, avec focus visible. L'en-tête précède
+  // désormais le contenu dans l'ordre de tabulation (Lot 6) : on vérifie que le lien de
+  // retour reste atteignable, pas qu'il est le tout premier élément de la page.
+  await page.getByRole('link', { name: 'Retour à la collection' }).focus();
   await expect(page.getByRole('link', { name: 'Retour à la collection' })).toBeFocused();
 
   await testInfo.attach(`fiche-album-${testInfo.project.name}`, {

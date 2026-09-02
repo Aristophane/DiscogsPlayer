@@ -223,6 +223,51 @@ Les quatre garanties difficiles (RAND-001, 002, 003, 005) sont portées par le S
 `(session_id, release_id)` pour interdire la répétition — et non par une vérification
 applicative qui pourrait être contournée par un appel concurrent.
 
+## Lot 6 (simplifié) — lecture, terminé le 2026-09-02
+
+Lot 5 (corrections communautaires) repoussé à la demande du porteur du produit ; ce lot
+livre la lecture directement, avec un modèle de résolution simplifié (ADR-0007).
+
+| Livrable                                                                                                        | Emplacement                                          | Vérification                          |
+| --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------- |
+| Schéma résolution (3 tables)                                                                                    | `src/db/schema/providers.ts`                         | migration `0005`                      |
+| Appariement vidéo/piste par titre                                                                               | `src/modules/catalog/video-match.ts`                 | 11 tests, calibré sur données réelles |
+| Quota YouTube en unités                                                                                         | `src/modules/providers/youtube/quota.ts`             | 5 tests, incl. bascules DST           |
+| Client + service YouTube                                                                                        | `src/modules/providers/youtube/`                     | double contrôlable, aucun appel réel  |
+| Service Spotify (URLs, oEmbed)                                                                                  | `src/modules/providers/spotify/service.ts`           | 8 tests                               |
+| Orchestration                                                                                                   | `src/modules/resolution/service.ts`                  | 10 tests d'intégration                |
+| Contexte + lecteur persistant                                                                                   | `src/modules/playback/`                              | IFrame API chargée à la demande       |
+| Boutons play (album/piste)                                                                                      | `src/modules/playback/components/play-button.tsx`    | testés en e2e                         |
+| En-tête de navigation                                                                                           | `src/modules/navigation/components/app-header.tsx`   | défilement mobile, pas de débordement |
+| Préférence Spotify (onboarding + réglages)                                                                      | `src/modules/auth/components/spotify-preference.tsx` | facultative, rejouable                |
+| Routes `/api/resolutions/*`, `/api/provider-urls/validate`, `/api/quotas/youtube`, `/api/me/spotify-preference` | `src/app/api/`                                       | testées en HTTP réel                  |
+
+**Vérifié en conditions réelles** : résolution d'un album de la collection directement
+depuis sa vidéo Discogs (`The Grip — Treble A Side`, sans aucun appel réseau), repli manuel
+propre sur une édition sans vidéo (recherche YouTube échoue proprement sans clé
+configurée), et lien Spotify apparaissant/disparaissant selon la préférence enregistrée.
+
+186 tests unitaires et d'intégration, 42 tests e2e sur mobile/tablette/desktop (trois
+passes consécutives sans instabilité).
+
+### Trois défauts trouvés par les tests, pas par relecture
+
+- **Bascule d'heure Pacifique** : la première version de `nextPacificMidnightUtc` mesurait
+  le décalage horaire à l'instant présent, pas à l'instant visé — fausse dans l'heure
+  suivant un changement d'heure. Corrigée par une résolution en deux passes.
+- **Liste de signaux négatifs dupliquée puis divergente** : `providers/youtube/service.ts`
+  avait sa propre copie de la liste de §15.2, qui a perdu « live » en la retapant. Un seul
+  export partagé désormais.
+- **Repli à vidéo unique trop permissif** : une vidéo « Interview Backstage » s'attribuait
+  à la première piste faute de mots-clés d'exclusion adaptés. Liste étendue
+  (interview, documentary, trailer, teaser…).
+
+### Un défaut visuel, corrigé après capture
+
+L'en-tête avec le nom de l'application et quatre liens ne tenait pas sur une ligne à
+390 px et recouvrait le contenu suivant. Capture prise, défaut visible, corrigé par une
+navigation qui défile horizontalement plutôt que de passer à la ligne.
+
 ## Ordonnancement conseillé ensuite
 
 L'ordre des lots de §24 est bon, avec deux ajustements issus de l'analyse :

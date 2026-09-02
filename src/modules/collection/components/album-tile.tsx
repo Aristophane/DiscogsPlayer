@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { t } from '@/lib/i18n';
 import type { CollectionItem } from '@/modules/collection/service';
+import { PlayButton } from '@/modules/playback/components/play-button';
 
 import { coverProxyUrl } from '../cover';
 
@@ -42,6 +43,13 @@ export function AlbumTile({ item, priority }: { item: CollectionItem; priority: 
               </span>
             </span>
           ) : null}
+
+          {/* Lit la première piste de l'album — friction minimale entre choisir et écouter. */}
+          <PlayButton
+            kind="album"
+            id={item.discogsReleaseId}
+            className="absolute bottom-1.5 right-1.5 opacity-90 shadow-sm"
+          />
         </div>
 
         <div className="flex flex-col">

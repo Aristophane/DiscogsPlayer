@@ -79,8 +79,10 @@ test('l’accueil connecté propose les trois entrées', async ({ page }, testIn
   await signIn(page);
   await page.goto('/');
 
-  await expect(page.getByRole('link', { name: /Collection/ })).toBeVisible();
-  await expect(page.getByRole('link', { name: /Aléatoire/ })).toBeVisible();
+  // `main` exclut l'en-tête, qui porte désormais ses propres liens de même nom (Lot 6).
+  const hub = page.getByRole('main');
+  await expect(hub.getByRole('link', { name: /Collection/ })).toBeVisible();
+  await expect(hub.getByRole('link', { name: /Aléatoire/ })).toBeVisible();
 
   // La radio est annoncée mais indisponible : elle dépend du Lot 6 (ADR-0006).
   const radio = page.getByText('Radio', { exact: true });

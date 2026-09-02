@@ -1,5 +1,6 @@
 import { t } from '@/lib/i18n';
 import { getCurrentUser } from '@/modules/auth/current-user';
+import { SpotifyPreferenceToggle } from '@/modules/auth/components/spotify-preference';
 import { countCollection } from '@/modules/collection/service';
 
 /**
@@ -33,6 +34,10 @@ export default async function HomePage() {
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-8 px-4 py-12 sm:px-6">
       <h1 className="text-2xl font-semibold tracking-tight">{t('home.hub.title')}</h1>
+
+      {/* Onboarding facultatif (ADR-0006) : disparaît dès qu'une réponse est donnée,
+          rejouable ensuite depuis les paramètres. */}
+      <SpotifyPreferenceToggle initial={user.spotifyEnabled} variant="onboarding" />
 
       <nav className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <HubTile

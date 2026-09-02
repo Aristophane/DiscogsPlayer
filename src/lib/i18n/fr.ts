@@ -8,6 +8,7 @@ export const fr = {
   'home.signIn': 'Se connecter avec Discogs',
   'home.status.bootstrap': 'Fondation technique en place — Lot 0.',
 
+  'nav.home': 'Accueil',
   'nav.collection': 'Collection',
   'nav.random': 'Aléatoire',
   'nav.playing': 'Lecture en cours',
@@ -137,6 +138,43 @@ export const fr = {
   'random.open': 'Ouvrir la fiche',
   'random.noAutoplay': 'Le tirage n’ouvre aucun lecteur : à vous de choisir une piste.',
   'random.error': 'Le tirage a échoué. Réessayez.',
+
+  // Lecteur persistant (§7.1 /lecture, §13.6, §14.6)
+  'player.loading': 'Résolution en cours…',
+  'player.close': 'Fermer le lecteur',
+  'player.openSpotify': 'Ouvrir dans Spotify',
+  'player.openYoutubeSearch': 'Rechercher sur YouTube',
+  'player.openSpotifySearch': 'Rechercher sur Spotify',
+  'player.quotaExhausted':
+    'La recherche automatique YouTube est momentanément indisponible (quota atteint).',
+  'player.unresolved.title': 'Cette piste n’a pas de correspondance connue.',
+  'player.unresolved.hint':
+    'Cherchez la vidéo ou l’album, copiez son lien, puis collez-le ci-dessous.',
+  'player.pasteUrl.label': 'Coller un lien YouTube ou Spotify',
+  'player.pasteUrl.placeholder': 'https://…',
+  'player.pasteUrl.submit': 'Valider',
+  'player.pasteUrl.error': 'Ce lien n’a pas pu être validé.',
+  'player.error': 'La lecture a échoué. Réessayez.',
+  'player.spotify.limits':
+    'Spotify peut ne lire qu’un extrait selon votre connexion sur ce navigateur.',
+
+  // Boutons play (album / piste)
+  'play.album': 'Lire l’album',
+  'play.track': 'Lire cette piste',
+
+  // Onboarding Spotify (ADR-0006)
+  'onboarding.spotify.title': 'Avez-vous un compte Spotify ?',
+  'onboarding.spotify.explanation':
+    'Si vous êtes connecté à Spotify dans ce navigateur, certaines pistes pourront s’y lire en entier plutôt qu’en extrait. Nous ne demandons aucune connexion à votre compte : juste un lien vers Spotify, à tout moment modifiable dans les paramètres.',
+  'onboarding.spotify.yes': 'Oui, j’ai un compte Spotify',
+  'onboarding.spotify.no': 'Non, pas pour le moment',
+  'onboarding.spotify.connect': 'Se connecter sur Spotify',
+  'onboarding.spotify.dismiss': 'Plus tard',
+  'settings.spotify.title': 'Compte Spotify',
+  'settings.spotify.status.yes': 'Vous avez indiqué posséder un compte Spotify.',
+  'settings.spotify.status.no': 'Vous avez indiqué ne pas avoir de compte Spotify.',
+  'settings.spotify.status.unset': 'Vous n’avez pas encore répondu.',
+  'settings.spotify.change': 'Modifier',
 
   'error.generic': 'Une erreur est survenue. Réessayez dans un instant.',
   'error.notFound': 'Cette page n’existe pas.',

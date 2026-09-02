@@ -34,6 +34,15 @@ export const users = pgTable(
     role: userRole('role').notNull().default('user'),
     contributionStatus: contributionStatus('contribution_status').notNull().default('active'),
     locale: text('locale').notNull().default('fr'),
+    /**
+     * Préférence d'onboarding (ADR-0006) : indique si l'utilisateur a un compte Spotify,
+     * pour proposer la recherche Spotify en repli. Facultatif, rejouable depuis les
+     * paramètres — jamais un OAuth, jamais une donnée reçue de Spotify.
+     */
+    spotifyEnabled: text('spotify_enabled')
+      .$type<'unset' | 'yes' | 'no'>()
+      .notNull()
+      .default('unset'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     /**
