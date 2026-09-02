@@ -10,8 +10,7 @@ import { t, type MessageKey } from '@/lib/i18n';
  *
  * La spécification ne prévoit qu'une barre basse mobile ; cet en-tête haut la complète
  * pour l'accès direct depuis n'importe quel écran, y compris la fiche album et l'import,
- * que la barre basse ne couvre pas. Radio reste visible mais désactivée tant que le
- * Lot 6 n'a pas de mode d'écoute continue propre (ADR-0006).
+ * que la barre basse ne couvre pas. Radio est un lien actif depuis le Lot 6 (ADR-0006).
  *
  * Sur petit mobile, le nom complet de l'application et quatre liens ne tiennent pas sur
  * une seule ligne sans déborder (vérifié à 390 px) : la nav défile horizontalement plutôt
@@ -21,6 +20,7 @@ const LINKS: { href: string; labelKey: MessageKey }[] = [
   { href: '/', labelKey: 'nav.home' },
   { href: '/collection', labelKey: 'nav.collection' },
   { href: '/aleatoire', labelKey: 'nav.random' },
+  { href: '/radio', labelKey: 'nav.radio' },
   { href: '/parametres', labelKey: 'nav.settings' },
 ];
 

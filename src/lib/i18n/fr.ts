@@ -11,6 +11,7 @@ export const fr = {
   'nav.home': 'Accueil',
   'nav.collection': 'Collection',
   'nav.random': 'Aléatoire',
+  'nav.radio': 'Radio',
   'nav.playing': 'Lecture en cours',
   'nav.settings': 'Paramètres',
 
@@ -121,7 +122,6 @@ export const fr = {
   'home.hub.random.hint': 'Tirer un album au hasard',
   'home.hub.radio': 'Radio',
   'home.hub.radio.hint': 'Lecture continue par genre',
-  'home.hub.radio.soon': 'Disponible une fois la lecture en place',
 
   // Aléatoire (§8.4)
   'random.title': 'Aléatoire',
@@ -139,6 +139,17 @@ export const fr = {
   'random.noAutoplay': 'Le tirage n’ouvre aucun lecteur : à vous de choisir une piste.',
   'random.error': 'Le tirage a échoué. Réessayez.',
 
+  // Radio (ADR-0006)
+  'radio.title': 'Radio',
+  'radio.explanation':
+    'Lecture continue à travers votre collection filtrée, en priorité depuis les pistes déjà connues.',
+  'radio.filters.title': 'Filtrer la radio',
+  'radio.filters.more': '+{count} autre(s) valeur(s), moins fréquentes',
+  'radio.start': 'Lancer la radio',
+  'radio.starting': 'Démarrage…',
+  'radio.error': 'La radio n’a pas pu démarrer. Réessayez.',
+  'radio.playing': 'La radio est en cours de lecture, en bas de l’écran.',
+
   // Lecteur persistant (§7.1 /lecture, §13.6, §14.6)
   'player.loading': 'Résolution en cours…',
   'player.close': 'Fermer le lecteur',
@@ -155,6 +166,10 @@ export const fr = {
   'player.pasteUrl.submit': 'Valider',
   'player.pasteUrl.error': 'Ce lien n’a pas pu être validé.',
   'player.error': 'La lecture a échoué. Réessayez.',
+  'player.radio.exhausted': 'Vous avez écouté toute la sélection.',
+  'player.radio.unavailable':
+    'Aucune piste n’a pu être résolue pour le moment (quota YouTube probablement atteint).',
+  'player.radio.restart': 'Relancer la radio',
   'player.spotify.limits':
     'Spotify peut ne lire qu’un extrait selon votre connexion sur ce navigateur.',
 

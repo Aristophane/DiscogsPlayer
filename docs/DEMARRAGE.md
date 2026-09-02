@@ -207,7 +207,7 @@ attendant, ADR-0006 prévaut (hiérarchie CLAUDE.md).
 | Service de tirage (SQL porte les garanties) | `src/modules/random/service.ts`           | 16 tests d'intégration            |
 | Routes `/api/random-sessions*`              | `src/app/api/random-sessions/`            | testées avec session réelle       |
 | Écran `/aleatoire`                          | `src/app/aleatoire/`, `random-drawer.tsx` | filtres, tirage, épuisement       |
-| Accueil à trois entrées (ADR-0006)          | `src/app/page.tsx`                        | Radio annoncée, désactivée        |
+| Accueil à trois entrées (ADR-0006)          | `src/app/page.tsx`                        | Radio annoncée, activée au Lot 6bis |
 
 **Critère de sortie atteint** : `tests/integration/random.test.ts` prouve l'absence de
 répétition (unicité `(session, édition)` en base, pas une vérification applicative) et
@@ -267,6 +267,37 @@ passes consécutives sans instabilité).
 L'en-tête avec le nom de l'application et quatre liens ne tenait pas sur une ligne à
 390 px et recouvrait le contenu suivant. Capture prise, défaut visible, corrigé par une
 navigation qui défile horizontalement plutôt que de passer à la ligne.
+
+## Lot 6bis — mode Radio, terminé le 2026-09-02
+
+Suite directe du Lot 6 : une file continue de pistes plutôt qu'un tirage d'album qui
+s'arrête (ADR-0006 point 2 et 3). Entrer en Radio *est* la demande de lecture — aucun
+écran intermédiaire, contrairement au mode Aléatoire.
+
+| Livrable                                     | Emplacement                                | Vérification                          |
+| --------------------------------------------- | ------------------------------------------- | -------------------------------------- |
+| Sessions et pistes de radio                   | `src/db/schema/radio.ts`                    | migration `0006`, unicité en base      |
+| Service de tirage en file (repli automatique) | `src/modules/radio/service.ts`              | 10 tests d'intégration                 |
+| Routes `/api/radio-sessions*`                 | `src/app/api/radio-sessions/`               | testées avec session réelle            |
+| Écran `/radio`                                | `src/app/radio/`, `radio-launcher.tsx`      | filtres, lancement, épuisement         |
+| Enchaînement dans le lecteur                  | `src/modules/playback/playback-context.tsx` | état `radio_ended`, tirage automatique |
+| Accueil et en-tête                            | `src/app/page.tsx`, `app-header.tsx`        | lien Radio actif                       |
+
+**Critère de sortie atteint** : le tirage suivant est réclamé atomiquement (CTE
+insert-as-claim sous contrainte d'unicité `(session, piste)`), avec priorité aux pistes
+déjà résolues et repli automatique sur un tirage à plusieurs tentatives
+(`MAX_ATTEMPTS_PER_DRAW = 6`) avant de déclarer la session épuisée ou indisponible.
+`tests/e2e/radio.spec.ts` prouve, dans un vrai navigateur, qu'entrer en Radio ouvre
+directement le lecteur — sans clic supplémentaire, à la différence du mode Aléatoire.
+
+196 tests unitaires et d'intégration, 51 tests e2e sur mobile/tablette/desktop.
+
+### Défaut trouvé par capture d'écran, pas par relecture
+
+Le formulaire de filtres listait toutes les valeurs de genre/style de la collection
+réelle — plusieurs centaines de styles à un seul exemplaire — rendant l'écran mobile
+interminable avant d'atteindre le bouton de lancement. Plafonné à 24 valeurs visibles
+par facette, une valeur déjà sélectionnée restant toujours visible.
 
 ## Ordonnancement conseillé ensuite
 

@@ -52,12 +52,11 @@ export default async function HomePage() {
           label={t('home.hub.random')}
           hint={t('home.hub.random.hint')}
         />
-        {/* La radio dépend de la résolution des médias : elle arrive après le Lot 6. */}
         <HubTile
+          href="/radio"
           icon="◎"
           label={t('home.hub.radio')}
           hint={t('home.hub.radio.hint')}
-          disabledHint={t('home.hub.radio.soon')}
         />
       </nav>
 

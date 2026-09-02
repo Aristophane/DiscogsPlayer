@@ -43,6 +43,13 @@
       "when": 1788354618754,
       "tag": "0005_pale_ironclad",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788371050857,
+      "tag": "0006_sleepy_the_executioner",
+      "breakpoints": true
     }
   ]
 }

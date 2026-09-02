@@ -29,7 +29,7 @@ export function PlayerBar() {
   const barRef = useRef<HTMLDivElement>(null);
 
   const visible = state.status !== 'idle';
-  const track = state.status === 'idle' ? null : state.track;
+  const track = state.status === 'idle' || state.status === 'radio_ended' ? null : state.track;
   const cover = track ? coverProxyUrl(track.coverUrl) : null;
 
   // Publie la hauteur réelle de la barre pour que le layout racine réserve exactement
@@ -141,6 +141,29 @@ export function PlayerBar() {
             >
               {t('player.openSpotify')}
             </a>
+          </div>
+        ) : null}
+
+        {state.status === 'radio_ended' ? (
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm">
+              {state.reason === 'exhausted'
+                ? t('player.radio.exhausted')
+                : t('player.radio.unavailable')}
+            </p>
+            <div className="flex shrink-0 gap-3">
+              <a href="/radio" className="text-sm underline">
+                {t('player.radio.restart')}
+              </a>
+              <button
+                type="button"
+                onClick={close}
+                aria-label={t('player.close')}
+                className="rounded-md border border-border px-3 py-1.5 text-sm"
+              >
+                ✕
+              </button>
+            </div>
           </div>
         ) : null}
 

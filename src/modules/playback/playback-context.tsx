@@ -40,12 +40,18 @@ export type PlaybackState =
       spotifyId: string;
     }
   | { status: 'unresolved'; track: TrackMeta; unresolved: Unresolved }
-  | { status: 'error'; track: TrackMeta };
+  | { status: 'error'; track: TrackMeta }
+  // Radio (ADR-0006) : plus rien à tirer. `exhausted` = tout a été écouté ;
+  // `unavailable` = il reste des pistes, mais aucune n'a pu être résolue (quota
+  // probable) — deux causes distinctes, deux messages différents pour l'utilisateur.
+  | { status: 'radio_ended'; reason: 'exhausted' | 'unavailable' };
 
 type PlaybackContextValue = {
   state: PlaybackState;
   playTrack: (trackId: string) => Promise<void>;
   playAlbum: (discogsReleaseId: string) => Promise<void>;
+  /** Démarre ou reprend une session Radio : chaque fin de piste enchaîne un tirage. */
+  playFromRadio: (radioSessionId: string) => Promise<void>;
   pasteUrl: (url: string) => Promise<boolean>;
   close: () => void;
   /**
@@ -64,7 +70,7 @@ type ResolutionResponse = {
     | { status: 'resolved'; provider: 'youtube'; videoId: string; title: string | null }
     | { status: 'resolved'; provider: 'spotify'; embedType: 'track' | 'album'; spotifyId: string }
     | ({ status: 'unresolved' } & Unresolved);
-  status?: 'empty' | 'next' | 'end_of_album';
+  status?: 'empty' | 'next' | 'end_of_album' | 'track' | 'exhausted' | 'unavailable';
 };
 
 async function postJson(url: string, body: unknown): Promise<ResolutionResponse | null> {
@@ -99,6 +105,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // Évite qu'un événement "fin de piste" tardif d'un lecteur qu'on vient de quitter ne
   // déclenche l'enchaînement d'une piste qui n'est déjà plus celle en cours.
   const currentTrackIdRef = useRef<string | null>(null);
+  // Non nul pendant une Radio : l'enchaînement (`advanceQueue`) tire alors une nouvelle
+  // piste de cette session plutôt que la piste suivante du même album. Toute lecture
+  // choisie explicitement ailleurs (playTrack/playAlbum) efface cette ref — quitter la
+  // Radio en cliquant autre chose est le comportement attendu, pas un mode à confirmer.
+  const activeRadioSessionRef = useRef<string | null>(null);
 
   function updateState(next: PlaybackState): void {
     stateRef.current = next;
@@ -171,6 +182,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         // Sans quoi la vidéo précédente resterait montée — hors écran (le conteneur
         // passe en `hidden`), mais toujours en train de jouer.
         stopYoutubePlayer();
+
+        if (activeRadioSessionRef.current) {
+          const reason = response.status === 'unavailable' ? 'unavailable' : 'exhausted';
+          activeRadioSessionRef.current = null;
+          updateState({ status: 'radio_ended', reason });
+          return;
+        }
+
         updateState({ status: 'idle' });
         return;
       }
@@ -218,12 +237,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     }
 
     const track = current.track;
+    const radioSessionId = activeRadioSessionRef.current;
     updateState({ status: 'loading', track });
 
-    const response = await postJson('/api/resolutions/next', {
-      releaseId: track.releaseId,
-      afterOrdinal: track.ordinal,
-    });
+    // En Radio, « la suite » est un nouveau tirage dans la session ; sinon, c'est la
+    // piste suivante du même album, dans l'ordre du disque (§13.6).
+    const response = radioSessionId
+      ? await postJson(`/api/radio-sessions/${radioSessionId}/draws`, {})
+      : await postJson('/api/resolutions/next', {
+          releaseId: track.releaseId,
+          afterOrdinal: track.ordinal,
+        });
 
     // La piste en cours a changé entre-temps (l'utilisateur a lancé autre chose) : on
     // n'écrase pas son choix avec une réponse devenue obsolète.
@@ -231,7 +255,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (!response || response.status === 'end_of_album' || !response.track) {
+    if (!response) {
+      updateState({ status: 'idle' });
+      return;
+    }
+
+    // Fin d'album (mode piste-à-piste normal) : jamais renvoyé par la Radio, qui a son
+    // propre vocabulaire de fin (`exhausted`/`unavailable`, géré par `applyResolution`).
+    if (!radioSessionId && (response.status === 'end_of_album' || !response.track)) {
       updateState({ status: 'idle' });
       return;
     }
@@ -248,6 +279,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const playTrack = useCallback(
     async (trackId: string) => {
+      // Choisir explicitement une piste ailleurs met fin à la Radio en cours, sans
+      // confirmation à demander : c'est le comportement attendu d'un clic délibéré.
+      activeRadioSessionRef.current = null;
       updateState({
         status: 'loading',
         track: {
@@ -276,6 +310,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const playAlbum = useCallback(
     async (discogsReleaseId: string) => {
+      activeRadioSessionRef.current = null;
       updateState({
         status: 'loading',
         track: {
@@ -290,6 +325,35 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       });
 
       const response = await postJson('/api/resolutions/album', { discogsReleaseId });
+      if (!response) {
+        if (stateRef.current.status === 'loading') {
+          updateState({ status: 'error', track: stateRef.current.track });
+        }
+        return;
+      }
+
+      applyResolution(response);
+    },
+    [applyResolution],
+  );
+
+  const playFromRadio = useCallback(
+    async (radioSessionId: string) => {
+      activeRadioSessionRef.current = radioSessionId;
+      updateState({
+        status: 'loading',
+        track: {
+          id: '',
+          ordinal: 0,
+          releaseId: '',
+          discogsReleaseId: '',
+          releaseTitle: '',
+          artists: '',
+          coverUrl: null,
+        },
+      });
+
+      const response = await postJson(`/api/radio-sessions/${radioSessionId}/draws`, {});
       if (!response) {
         if (stateRef.current.status === 'loading') {
           updateState({ status: 'error', track: stateRef.current.track });
@@ -346,12 +410,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const close = useCallback(() => {
     stopYoutubePlayer();
     currentTrackIdRef.current = null;
+    activeRadioSessionRef.current = null;
     updateState({ status: 'idle' });
   }, [stopYoutubePlayer]);
 
   return (
     <PlaybackContext.Provider
-      value={{ state, playTrack, playAlbum, pasteUrl, close, setYoutubeContainer }}
+      value={{ state, playTrack, playAlbum, playFromRadio, pasteUrl, close, setYoutubeContainer }}
     >
       {children}
     </PlaybackContext.Provider>

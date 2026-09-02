@@ -84,10 +84,8 @@ test('l’accueil connecté propose les trois entrées', async ({ page }, testIn
   await expect(hub.getByRole('link', { name: /Collection/ })).toBeVisible();
   await expect(hub.getByRole('link', { name: /Aléatoire/ })).toBeVisible();
 
-  // La radio est annoncée mais indisponible : elle dépend du Lot 6 (ADR-0006).
-  const radio = page.getByText('Radio', { exact: true });
-  await expect(radio).toBeVisible();
-  await expect(page.getByText('Disponible une fois la lecture en place')).toBeVisible();
+  // La Radio est active depuis le Lot 6 : un lien réel, pas une annonce désactivée.
+  await expect(hub.getByRole('link', { name: /Radio/ })).toBeVisible();
 
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
