@@ -72,7 +72,9 @@ test.afterAll(async () => {
 });
 
 async function signIn(page: Page) {
-  await page.context().addCookies([{ name: 'dp_session', value: token, domain: 'localhost', path: '/' }]);
+  await page
+    .context()
+    .addCookies([{ name: 'dp_session', value: token, domain: 'localhost', path: '/' }]);
 }
 
 test('entrer en Radio lance la lecture sans étape intermédiaire (ADR-0006)', async ({ page }) => {

@@ -7,7 +7,13 @@ import { eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { db, sql } from '@/db/client';
-import { collectionInstances, discogsReleases, radioSessionTracks, radioSessions, users } from '@/db/schema';
+import {
+  collectionInstances,
+  discogsReleases,
+  radioSessionTracks,
+  radioSessions,
+  users,
+} from '@/db/schema';
 import { upsertUserFromDiscogs } from '@/modules/auth/service';
 import { applyReleaseDetails } from '@/modules/catalog/service';
 import type { YoutubeApi, YoutubeSearchResult } from '@/modules/providers/youtube/api';

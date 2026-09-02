@@ -85,8 +85,8 @@ passable**, rejouable depuis les paramètres.
 
 #### L'échelle suivante : Web Playback SDK — décision du 2026-09-02, reportée
 
-Le _Web Playback SDK_ n'est **pas** un simple OAuth : il crée un vrai lecteur *dans la
-page*, piloté en JavaScript (play/pause/seek/volume), qui joue les morceaux en entier
+Le _Web Playback SDK_ n'est **pas** un simple OAuth : il crée un vrai lecteur _dans la
+page_, piloté en JavaScript (play/pause/seek/volume), qui joue les morceaux en entier
 depuis le compte de l'utilisateur — contrairement à l'Embed, qui reste un iframe fiée à la
 session du navigateur. C'est la seule voie qui livre un lecteur intégré comparable à
 YouTube. Trois contraintes, discutées et **explicitement reportées** :
@@ -97,11 +97,11 @@ YouTube. Trois contraintes, discutées et **explicitement reportées** :
 - **Application développeur** avec écran de consentement OAuth — techniquement proche de
   ce qui a déjà été fait pour Discogs.
 - **Approbation Spotify, le vrai risque.** Depuis leur durcissement de fin 2024, une
-  nouvelle application démarre en *Development Mode*, plafonnée à 25 comptes ajoutés à la
-  main. Ouvrir au public exige l'*Extended Quota Mode*, une revue manuelle à l'issue
+  nouvelle application démarre en _Development Mode_, plafonnée à 25 comptes ajoutés à la
+  main. Ouvrir au public exige l'_Extended Quota Mode_, une revue manuelle à l'issue
   incertaine, en particulier pour tout ce qui ressemble à un produit de lecture tiers.
 
-*Décision retenue (2026-09-02)* : reporté. L'Embed actuel reste suffisant ; le SDK sera
+_Décision retenue (2026-09-02)_ : reporté. L'Embed actuel reste suffisant ; le SDK sera
 reconsidéré si Spotify devient central au produit (question v1 ouverte, §25.2).
 
 ### Bandcamp — lecture oui, pilotage non

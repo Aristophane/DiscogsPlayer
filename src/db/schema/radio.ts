@@ -29,8 +29,14 @@ export const radioSessions = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    filterGenres: text('filter_genres').array().notNull().default(sql`'{}'::text[]`),
-    filterStyles: text('filter_styles').array().notNull().default(sql`'{}'::text[]`),
+    filterGenres: text('filter_genres')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    filterStyles: text('filter_styles')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     /** Posé quand plus aucune piste éligible n'a été jouée (fin de la radio). */
     completedAt: timestamp('completed_at', { withTimezone: true }),

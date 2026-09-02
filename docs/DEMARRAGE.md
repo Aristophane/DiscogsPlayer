@@ -201,12 +201,12 @@ attendant, ADR-0006 prévaut (hiérarchie CLAUDE.md).
 
 ## Lot 4 — Aléatoire, terminé le 2026-09-02
 
-| Livrable                                    | Emplacement                               | Vérification                      |
-| ------------------------------------------- | ----------------------------------------- | --------------------------------- |
-| Sessions et tirages                         | `src/db/schema/random.ts`                 | migration `0004`, unicité en base |
-| Service de tirage (SQL porte les garanties) | `src/modules/random/service.ts`           | 16 tests d'intégration            |
-| Routes `/api/random-sessions*`              | `src/app/api/random-sessions/`            | testées avec session réelle       |
-| Écran `/aleatoire`                          | `src/app/aleatoire/`, `random-drawer.tsx` | filtres, tirage, épuisement       |
+| Livrable                                    | Emplacement                               | Vérification                        |
+| ------------------------------------------- | ----------------------------------------- | ----------------------------------- |
+| Sessions et tirages                         | `src/db/schema/random.ts`                 | migration `0004`, unicité en base   |
+| Service de tirage (SQL porte les garanties) | `src/modules/random/service.ts`           | 16 tests d'intégration              |
+| Routes `/api/random-sessions*`              | `src/app/api/random-sessions/`            | testées avec session réelle         |
+| Écran `/aleatoire`                          | `src/app/aleatoire/`, `random-drawer.tsx` | filtres, tirage, épuisement         |
 | Accueil à trois entrées (ADR-0006)          | `src/app/page.tsx`                        | Radio annoncée, activée au Lot 6bis |
 
 **Critère de sortie atteint** : `tests/integration/random.test.ts` prouve l'absence de
@@ -271,10 +271,10 @@ navigation qui défile horizontalement plutôt que de passer à la ligne.
 ## Lot 6bis — mode Radio, terminé le 2026-09-02
 
 Suite directe du Lot 6 : une file continue de pistes plutôt qu'un tirage d'album qui
-s'arrête (ADR-0006 point 2 et 3). Entrer en Radio *est* la demande de lecture — aucun
+s'arrête (ADR-0006 point 2 et 3). Entrer en Radio _est_ la demande de lecture — aucun
 écran intermédiaire, contrairement au mode Aléatoire.
 
-| Livrable                                     | Emplacement                                | Vérification                          |
+| Livrable                                      | Emplacement                                 | Vérification                           |
 | --------------------------------------------- | ------------------------------------------- | -------------------------------------- |
 | Sessions et pistes de radio                   | `src/db/schema/radio.ts`                    | migration `0006`, unicité en base      |
 | Service de tirage en file (repli automatique) | `src/modules/radio/service.ts`              | 10 tests d'intégration                 |

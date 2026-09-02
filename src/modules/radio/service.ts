@@ -173,7 +173,9 @@ async function markResolved(sessionId: string, trackId: string): Promise<void> {
   await db
     .update(radioSessionTracks)
     .set({ resolved: true })
-    .where(and(eq(radioSessionTracks.sessionId, sessionId), eq(radioSessionTracks.trackId, trackId)));
+    .where(
+      and(eq(radioSessionTracks.sessionId, sessionId), eq(radioSessionTracks.trackId, trackId)),
+    );
 }
 
 /**

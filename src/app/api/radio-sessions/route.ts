@@ -20,7 +20,11 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   try {
     if (!hasTrustedOrigin(request)) {
-      throw new ApiError({ code: 'CSRF_ORIGIN_REJECTED', message: 'Requête refusée.', status: 403 });
+      throw new ApiError({
+        code: 'CSRF_ORIGIN_REJECTED',
+        message: 'Requête refusée.',
+        status: 403,
+      });
     }
 
     const user = await requireUser();

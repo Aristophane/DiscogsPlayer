@@ -1,0 +1,92 @@
+# Déploiement de production — pointer Coolify (ressource « Docker Compose ») sur ce
+# fichier. Quatre services partageant la même image applicative (Dockerfile) : la
+# migration (tâche unique), l'app web, le worker de tâches (SPECIFICATION.md §9.4) et
+# PostgreSQL.
+#
+# Domaine et TLS : ne rien configurer ici. Sur une ressource Docker Compose, Coolify
+# détecte le service exposant un port (`app`, ci-dessous) et y attache son proxy Traefik
+# géré (domaine + certificat Let's Encrypt) depuis son interface — aucun label manuel à
+# ajouter. Voir docs/DEPLOIEMENT.md.
+#
+# Variables : toutes viennent de `.env` (non versionné, une valeur par ligne
+# `NOM=valeur`), que Coolify constitue depuis les variables d'environnement saisies dans
+# son interface pour cette ressource. Modèle et explication de chaque variable :
+# .env.example. `NODE_ENV=production` et `PROVIDERS_MODE=live` sont vérifiés au
+# démarrage (src/lib/env.ts) — le processus refuse de démarrer sinon (AUTH-003).
+
+services:
+  # Tâche unique, pas un serveur : applique les migrations en attente puis se termine.
+  # `app` et `worker` attendent sa réussite avant de démarrer — sans ça, le worker peut
+  # interroger une table pas encore créée (constaté en vérification locale : les deux
+  # services ne dépendaient que de `postgres`, qui est prêt bien avant la fin de la
+  # migration lancée par `app`). Idempotent : ne rejoue que les migrations manquantes.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ['npm', 'run', 'db:migrate']
+    restart: 'no'
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ['npm', 'run', 'start']
+    restart: unless-stopped
+    env_file:
+      - .env
+    expose:
+      - '3004'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--spider', 'http://localhost:3004/api/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ['npm', 'run', 'worker:prod']
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-discogs}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-discogs_player}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-discogs} -d ${POSTGRES_DB:-discogs_player}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Pas de port publié : seuls `migrate`, `app` et `worker` accèdent à Postgres, via le
+    # réseau interne du projet Compose. La sauvegarde (§26, décision humaine encore
+    # ouverte) se fait par `pg_dump` depuis le conteneur ou par un volume snapshot côté
+    # hébergeur, pas par une exposition réseau.
+
+volumes:
+  pgdata:

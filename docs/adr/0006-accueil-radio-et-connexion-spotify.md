@@ -105,7 +105,7 @@ Trois honnêtetés obligatoires dans l'interface (§14.7) :
 ### Addendum (2026-09-02) — Web Playback SDK explicitement reporté
 
 Question posée après coup : un OAuth Spotify ne permettrait-il pas un vrai lecteur intégré
-plutôt que l'Embed ? Réponse : si, via le *Web Playback SDK* — mais ce n'est pas « OAuth »
+plutôt que l'Embed ? Réponse : si, via le _Web Playback SDK_ — mais ce n'est pas « OAuth »
 au sens où le point 4 ci-dessus l'écarte (un simple lien de connexion sans jeton). Le SDK
 exige un OAuth complet, un compte **Premium** (le SDK ne fonctionne pas du tout sur un
 compte gratuit), une application développeur déclarée, et surtout l'**Extended Quota Mode**

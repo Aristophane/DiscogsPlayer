@@ -7,6 +7,7 @@ puis écoutez-le via YouTube ou un Embed Spotify.
 - Écarts identifiés et résolutions retenues : [`docs/SPEC-GAPS.md`](docs/SPEC-GAPS.md)
 - Décisions techniques : [`docs/adr/`](docs/adr/)
 - État d'avancement et actions humaines : [`docs/DEMARRAGE.md`](docs/DEMARRAGE.md)
+- Déploiement en production (VPS Docker Compose / Coolify) : [`docs/DEPLOIEMENT.md`](docs/DEPLOIEMENT.md)
 
 ## Prérequis
 

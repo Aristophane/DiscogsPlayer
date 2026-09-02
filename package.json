@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start -p 3004",
     "worker": "tsx --env-file=.env.local src/worker/main.ts",
+    "worker:prod": "tsx src/worker/main.ts",
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

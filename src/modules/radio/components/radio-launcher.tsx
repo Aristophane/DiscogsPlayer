@@ -12,11 +12,7 @@ type Facet = { value: string; count: number };
  * lecture — contrairement au mode Aléatoire, aucune étape intermédiaire n'est nécessaire,
  * le bouton lance directement le lecteur.
  */
-export function RadioLauncher({
-  facets,
-}: {
-  facets: { genres: Facet[]; styles: Facet[] };
-}) {
+export function RadioLauncher({ facets }: { facets: { genres: Facet[]; styles: Facet[] } }) {
   const { playFromRadio, state } = usePlayback();
   const [genres, setGenres] = useState<string[]>([]);
   const [styles, setStyles] = useState<string[]>([]);
@@ -149,9 +145,7 @@ function FacetGroup({
         })}
       </div>
       {hiddenCount > 0 ? (
-        <p className="text-xs text-muted">
-          {t('radio.filters.more', { count: hiddenCount })}
-        </p>
+        <p className="text-xs text-muted">{t('radio.filters.more', { count: hiddenCount })}</p>
       ) : null}
     </fieldset>
   );
