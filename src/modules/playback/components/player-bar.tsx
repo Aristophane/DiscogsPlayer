@@ -22,20 +22,39 @@ import { usePlayback } from '../playback-context';
  * `NotFoundError` réel en enchaînant deux pistes (l'API YouTube remplace ce nœud par un
  * `<iframe>` en dehors de React ; le faire apparaître/disparaître du JSX fait perdre à
  * React la référence DOM qu'il croit encore posséder — voir `playback-context.tsx`).
+ *
+ * Réductible (Lot 6bis) : la vidéo peut recouvrir une bonne partie de l'écran en
+ * parcourant la collection en même temps. Le tiroir se replie par une transition CSS
+ * (`grid-template-rows`) qui ramène la ligne à hauteur nulle sous `overflow-hidden` —
+ * jamais en retirant le conteneur YouTube du DOM ni en le masquant par `display: none`,
+ * ce qui coupe la lecture dans la plupart des navigateurs. Le son continue pendant que
+ * la vidéo est repliée, exactement le but recherché.
  */
 export function PlayerBar() {
-  const { state, close, pasteUrl, setYoutubeContainer } = usePlayback();
-  const [pasteValue, setPasteValue] = useState('');
-  const [pasteError, setPasteError] = useState(false);
+  const { state, close, setYoutubeContainer } = usePlayback();
+  const [expanded, setExpanded] = useState(true);
   const barRef = useRef<HTMLDivElement>(null);
+  // Vrai seulement à la transition idle → actif : un repli choisi par l'utilisateur reste
+  // replié le temps d'une même écoute (enchaînement, Radio), mais une toute nouvelle
+  // lecture s'ouvre toujours dépliée — c'est ce qu'on vient de demander de voir.
+  const wasVisibleRef = useRef(false);
 
   const visible = state.status !== 'idle';
   const track = state.status === 'idle' || state.status === 'radio_ended' ? null : state.track;
   const cover = track ? coverProxyUrl(track.coverUrl) : null;
 
+  useEffect(() => {
+    if (visible && !wasVisibleRef.current) {
+      setExpanded(true);
+    }
+    wasVisibleRef.current = visible;
+  }, [visible]);
+
   // Publie la hauteur réelle de la barre pour que le layout racine réserve exactement
   // cet espace (voir le commentaire dans `layout.tsx`) : un contenu variable (vidéo,
-  // formulaire de repli) rend toute valeur figée fausse dans un sens ou dans l'autre.
+  // repli manuel, tiroir replié ou déplié) rend toute valeur figée fausse dans un sens
+  // ou dans l'autre. `ResizeObserver` suit aussi l'animation de repliement elle-même,
+  // pas seulement les changements d'état.
   useEffect(() => {
     const element = barRef.current;
     if (!element) {
@@ -53,17 +72,6 @@ export function PlayerBar() {
     observer.observe(element);
     return () => observer.disconnect();
   }, [visible, state.status]);
-
-  async function submitPaste(event: React.FormEvent) {
-    event.preventDefault();
-    setPasteError(false);
-    const ok = await pasteUrl(pasteValue);
-    if (ok) {
-      setPasteValue('');
-    } else {
-      setPasteError(true);
-    }
-  }
 
   return (
     <div
@@ -88,6 +96,17 @@ export function PlayerBar() {
 
             <button
               type="button"
+              onClick={() => setExpanded((value) => !value)}
+              aria-expanded={expanded}
+              aria-controls="player-bar-expandable"
+              aria-label={expanded ? t('player.collapse') : t('player.expand')}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-sm"
+            >
+              <span aria-hidden="true">{expanded ? '▾' : '▴'}</span>
+            </button>
+
+            <button
+              type="button"
               onClick={close}
               aria-label={t('player.close')}
               className="rounded-md border border-border px-3 py-1.5 text-sm"
@@ -97,56 +116,97 @@ export function PlayerBar() {
           </div>
         ) : null}
 
-        {state.status === 'loading' ? (
-          <p aria-live="polite" className="flex items-center gap-2 text-sm text-muted">
-            {state.reason === 'tracklist_pending' ? <VinylSpinner size={20} /> : null}
-            {state.reason === 'tracklist_pending'
-              ? t('player.loading.tracklistPending')
-              : t('player.loading')}
-          </p>
-        ) : null}
-
-        {state.status === 'error' ? (
-          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-            {t('player.error')}
-          </p>
-        ) : null}
-
-        {/*
-          Position stable, toujours rendue : seule la classe change selon l'état. Le
-          contenu réel (l'iframe) est créé de façon impérative par `playback-context.tsx`,
-          jamais par React — voir le commentaire d'en-tête.
-        */}
         <div
-          ref={setYoutubeContainer}
-          className={state.status === 'playing_youtube' ? 'aspect-video w-full max-w-sm' : 'hidden'}
-        />
+          id="player-bar-expandable"
+          className={`grid overflow-hidden transition-[grid-template-rows] duration-300 ease-in-out ${expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+        >
+          <div className="flex min-h-0 flex-col gap-3 overflow-hidden">
+            {state.status === 'loading' ? (
+              <p aria-live="polite" className="flex items-center gap-2 text-sm text-muted">
+                {state.reason === 'tracklist_pending' ? <VinylSpinner size={20} /> : null}
+                {state.reason === 'tracklist_pending'
+                  ? t('player.loading.tracklistPending')
+                  : t('player.loading')}
+              </p>
+            ) : null}
 
-        {state.status === 'playing_spotify' ? (
-          <div className="flex flex-col gap-2">
-            <iframe
-              title={`${state.track.releaseTitle} — Spotify`}
-              // `autoplay=1` : best-effort seulement, comme documenté (§14.7, PLAY-005) —
-              // Spotify ne garantit pas l'autoplay programmatique selon navigateur et
-              // connexion. Le bouton « Ouvrir dans Spotify » reste le filet de sécurité.
-              src={`https://open.spotify.com/embed/${state.entityType}/${state.spotifyId}?autoplay=1`}
-              width="100%"
-              height="152"
-              allow="autoplay; encrypted-media; fullscreen; clipboard-write"
-              loading="lazy"
-              className="rounded-md"
+            {state.status === 'error' ? (
+              <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                {t('player.error')}
+              </p>
+            ) : null}
+
+            {/*
+              Position stable, toujours rendue : seule la classe change selon l'état. Le
+              contenu réel (l'iframe) est créé de façon impérative par
+              `playback-context.tsx`, jamais par React — voir le commentaire d'en-tête.
+            */}
+            <div
+              ref={setYoutubeContainer}
+              className={
+                state.status === 'playing_youtube' ? 'aspect-video w-full max-w-sm' : 'hidden'
+              }
             />
-            <p className="text-xs text-muted">{t('player.spotify.limits')}</p>
-            <a
-              href={`https://open.spotify.com/${state.entityType}/${state.spotifyId}`}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="self-start text-xs underline"
-            >
-              {t('player.openSpotify')}
-            </a>
+
+            {state.status === 'playing_spotify' ? (
+              <div className="flex flex-col gap-2">
+                <iframe
+                  title={`${state.track.releaseTitle} — Spotify`}
+                  // `autoplay=1` : best-effort seulement, comme documenté (§14.7, PLAY-005) —
+                  // Spotify ne garantit pas l'autoplay programmatique selon navigateur et
+                  // connexion. Le bouton « Ouvrir dans Spotify » reste le filet de sécurité.
+                  src={`https://open.spotify.com/embed/${state.entityType}/${state.spotifyId}?autoplay=1`}
+                  width="100%"
+                  height="152"
+                  allow="autoplay; encrypted-media; fullscreen; clipboard-write"
+                  loading="lazy"
+                  className="rounded-md"
+                />
+                <p className="text-xs text-muted">{t('player.spotify.limits')}</p>
+                <a
+                  href={`https://open.spotify.com/${state.entityType}/${state.spotifyId}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="self-start text-xs underline"
+                >
+                  {t('player.openSpotify')}
+                </a>
+              </div>
+            ) : null}
+
+            {state.status === 'unresolved' ? (
+              <div className="flex flex-col gap-3">
+                <p className="text-sm">{t('player.unresolved.title')}</p>
+                {state.unresolved.quotaExhausted ? (
+                  <p className="text-sm text-amber-600 dark:text-amber-400">
+                    {t('player.quotaExhausted')}
+                  </p>
+                ) : null}
+
+                <div className="flex flex-wrap gap-3 text-sm">
+                  <a
+                    href={state.unresolved.youtubeSearchUrl}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="rounded-md border border-border px-3 py-1.5"
+                  >
+                    {t('player.openYoutubeSearch')}
+                  </a>
+                  {state.unresolved.spotifySearchUrl ? (
+                    <a
+                      href={state.unresolved.spotifySearchUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="rounded-md border border-border px-3 py-1.5"
+                    >
+                      {t('player.openSpotifySearch')}
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
-        ) : null}
+        </div>
 
         {state.status === 'radio_ended' ? (
           <div className="flex items-center justify-between gap-3">
@@ -168,66 +228,6 @@ export function PlayerBar() {
                 ✕
               </button>
             </div>
-          </div>
-        ) : null}
-
-        {state.status === 'unresolved' ? (
-          <div className="flex flex-col gap-3">
-            <p className="text-sm">{t('player.unresolved.title')}</p>
-            {state.unresolved.quotaExhausted ? (
-              <p className="text-sm text-amber-600 dark:text-amber-400">
-                {t('player.quotaExhausted')}
-              </p>
-            ) : null}
-
-            <div className="flex flex-wrap gap-3 text-sm">
-              <a
-                href={state.unresolved.youtubeSearchUrl}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="rounded-md border border-border px-3 py-1.5"
-              >
-                {t('player.openYoutubeSearch')}
-              </a>
-              {state.unresolved.spotifySearchUrl ? (
-                <a
-                  href={state.unresolved.spotifySearchUrl}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="rounded-md border border-border px-3 py-1.5"
-                >
-                  {t('player.openSpotifySearch')}
-                </a>
-              ) : null}
-            </div>
-
-            <form onSubmit={submitPaste} className="flex flex-col gap-1">
-              <label htmlFor="player-paste-url" className="text-xs text-muted">
-                {t('player.pasteUrl.label')}
-              </label>
-              <p className="text-xs text-muted">{t('player.unresolved.hint')}</p>
-              <div className="flex gap-2">
-                <input
-                  id="player-paste-url"
-                  type="url"
-                  value={pasteValue}
-                  onChange={(event) => setPasteValue(event.target.value)}
-                  placeholder={t('player.pasteUrl.placeholder')}
-                  className="min-w-0 flex-1 rounded-md border border-border bg-transparent px-3 py-1.5 text-sm"
-                />
-                <button
-                  type="submit"
-                  className="rounded-md bg-foreground px-3 py-1.5 text-sm font-medium text-background"
-                >
-                  {t('player.pasteUrl.submit')}
-                </button>
-              </div>
-              {pasteError ? (
-                <p role="alert" className="text-xs text-red-600 dark:text-red-400">
-                  {t('player.pasteUrl.error')}
-                </p>
-              ) : null}
-            </form>
           </div>
         ) : null}
       </div>

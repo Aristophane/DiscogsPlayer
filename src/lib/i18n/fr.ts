@@ -157,18 +157,14 @@ export const fr = {
   'player.loading': 'Résolution en cours…',
   'player.loading.tracklistPending': 'Récupération des pistes de l’album…',
   'player.close': 'Fermer le lecteur',
+  'player.expand': 'Déplier le lecteur',
+  'player.collapse': 'Replier le lecteur',
   'player.openSpotify': 'Ouvrir dans Spotify',
   'player.openYoutubeSearch': 'Rechercher sur YouTube',
   'player.openSpotifySearch': 'Rechercher sur Spotify',
   'player.quotaExhausted':
     'La recherche automatique YouTube est momentanément indisponible (quota atteint).',
   'player.unresolved.title': 'Cette piste n’a pas de correspondance connue.',
-  'player.unresolved.hint':
-    'Cherchez la vidéo ou l’album, copiez son lien, puis collez-le ci-dessous.',
-  'player.pasteUrl.label': 'Coller un lien YouTube ou Spotify',
-  'player.pasteUrl.placeholder': 'https://…',
-  'player.pasteUrl.submit': 'Valider',
-  'player.pasteUrl.error': 'Ce lien n’a pas pu être validé.',
   'player.error': 'La lecture a échoué. Réessayez.',
   'player.radio.exhausted': 'Vous avez écouté toute la sélection.',
   'player.radio.unavailable':

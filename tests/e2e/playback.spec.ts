@@ -170,6 +170,48 @@ test('le bouton play d’un album résout depuis la vidéo Discogs, sans écran 
   await expect(page.getByText('Résolution en cours…')).toHaveCount(0, { timeout: 5_000 });
 });
 
+test('le lecteur se replie sans interrompre la vidéo (Lot 6bis)', async ({ page }) => {
+  await signIn(page);
+  await page.goto(`/sorties/${releaseWithVideoId}`);
+  await page.getByRole('button', { name: 'Lire l’album' }).click();
+
+  const video = page.locator('iframe[src*="youtube.com"]');
+  await expect(video).toBeVisible({ timeout: 10_000 });
+
+  const toggle = page.getByRole('button', { name: 'Replier le lecteur' });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+  await toggle.click();
+
+  await expect(page.getByRole('button', { name: 'Déplier le lecteur' })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
+
+  // Rognée à hauteur nulle par l'ancêtre replié — la preuve directe du mécanisme, plus
+  // fiable ici que `toBeVisible()` : Playwright ne détecte pas un rognage par overflow
+  // d'un ancêtre, seulement la visibilité propre de l'élément (vérifié : un clic au
+  // centre de l'iframe ne touche plus l'iframe une fois repliée, mais `toBeVisible()`
+  // la rapporte quand même visible).
+  await expect(page.locator('#player-bar-expandable')).toHaveCSS('height', '0px');
+  // Toujours dans le DOM, pas démontée : contrairement à `display: none`, qui coupe la
+  // lecture dans la plupart des navigateurs (voir le commentaire d'en-tête de
+  // player-bar.tsx), le repli visuel seul laisse le son continuer.
+  await expect(video).toBeAttached();
+  await expect(video).toHaveAttribute('src', /youtube\.com/);
+
+  // La piste reste identifiable même repliée : c'est le but du repli, pas une fermeture.
+  await expect(page.getByText('Première Piste')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Déplier le lecteur' }).click();
+  await expect(page.getByRole('button', { name: 'Replier le lecteur' })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
+  await expect(page.locator('#player-bar-expandable')).not.toHaveCSS('height', '0px');
+  await expect(video).toBeVisible();
+});
+
 test('lire une piste sans correspondance juste après une piste résolue ne casse pas la page', async ({
   page,
 }) => {

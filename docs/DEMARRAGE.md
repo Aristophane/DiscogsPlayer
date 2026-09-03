@@ -337,6 +337,34 @@ réconciliés) : nécessaire pour qu'un clic utilisateur puisse faire remonter u
 que l'import avait déjà programmée à priorité normale. `tests/integration/queue.test.ts`
 a été réécrit en conséquence, pas seulement complété.
 
+## Lecteur réductible et suppression du collage manuel, 2026-09-03
+
+Deux demandes du porteur du produit, indépendantes l'une de l'autre.
+
+**Lecteur réductible.** La vidéo YouTube pouvait recouvrir une bonne partie de l'écran en
+parcourant la collection en même temps qu'une lecture. Un bouton ▾/▴ dans la barre du
+lecteur replie désormais tout ce qui est en dessous de la ligne titre/artiste (vidéo,
+Spotify, messages d'état) par une transition CSS (`grid-template-rows`), jamais en
+retirant le conteneur YouTube du DOM ni par `display: none` — les deux coupent la lecture
+dans la plupart des navigateurs, alors que le repli visuel seul la laisse continuer. Une
+nouvelle lecture s'ouvre toujours dépliée ; un repli choisi par l'utilisateur reste replié
+le temps d'une même écoute (`src/modules/playback/components/player-bar.tsx`).
+
+**Repli manuel « coller un lien » retiré.** SPECIFICATION.md §13.1/§14.2 prévoyait un
+champ pour coller une URL YouTube/Spotify quand la résolution automatique échoue —
+jugé sans utilité réelle par le porteur du produit, retiré à sa demande explicite. Les
+liens de recherche (« Rechercher sur YouTube »/« Rechercher sur Spotify ») restent le
+seul repli manuel. Supprimés : `pasteUrl` (`playback-context.tsx`),
+`POST /api/provider-urls/validate` (route entière), le formulaire correspondant et ses
+clés i18n. Conservés à dessein : `canonicalizeSpotifyUrl`/`validateViaOEmbed`
+(`providers/spotify/service.ts`) et `youtubeIdFromUrl` (`catalog/normalize.ts`) — des
+utilitaires génériques d'analyse d'URL, utilisés ailleurs (résolution, Lot 5 futur), pas
+spécifiques à ce formulaire. Décision consignée dans ADR-0007 (addendum), qui amende
+explicitement SPECIFICATION.md §13.1/§14.2/§17.5.
+
+Aucun test dédié n'existait pour cette route ou pour `pasteUrl` : rien à réécrire de ce
+côté. `npm run verify` complet repassé après coup.
+
 ## Ordonnancement conseillé ensuite
 
 L'ordre des lots de §24 est bon, avec deux ajustements issus de l'analyse :

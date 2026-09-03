@@ -84,3 +84,22 @@ réel observé en capture avant correction.
   aurait demandé le même effort que le Lot 5 sans la fonctionnalité qui le justifie
   (correction communautaire), pour un bénéfice nul en v0 mono-résolution.
 - **Mappage vidéo/piste par position** : contredit directement les données réelles.
+
+## Addendum (2026-09-03) — repli « coller une URL » retiré
+
+Point 2 mentionnait le repli manuel sans détailler ses deux composantes distinctes :
+les liens de recherche (toujours présents) et un champ pour coller une URL YouTube ou
+Spotify validée côté serveur (§13.1, §14.2, §17.5 — route `POST /api/provider-urls/validate`
+implémentée telle que spécifiée).
+
+Le porteur du produit a demandé le retrait de la seconde composante : jugée sans utilité
+réelle pour les utilisateurs. Cette décision **amende SPECIFICATION.md §13.1, §14.2 et
+§17.5**, qui continuent de la décrire — la hiérarchie CLAUDE.md (ADR > SPEC-GAPS >
+SPECIFICATION.md) s'applique ici explicitement, avec validation humaine directe, pas une
+déduction technique.
+
+Retirés : `pasteUrl` (`playback-context.tsx`), la route entière, le formulaire et ses
+clés i18n (`player.pasteUrl.*`, `player.unresolved.hint`). Conservés, car génériques et
+utilisés ailleurs : `youtubeIdFromUrl` (résolution automatique) et
+`canonicalizeSpotifyUrl`/`validateViaOEmbed` (préférence Spotify, réutilisables par un
+futur Lot 5). Les liens de recherche restent le seul repli manuel.

@@ -62,7 +62,6 @@ type PlaybackContextValue = {
   playAlbum: (discogsReleaseId: string) => Promise<void>;
   /** Démarre ou reprend une session Radio : chaque fin de piste enchaîne un tirage. */
   playFromRadio: (radioSessionId: string) => Promise<void>;
-  pasteUrl: (url: string) => Promise<boolean>;
   close: () => void;
   /**
    * Ref callback à poser sur le conteneur stable du lecteur (`PlayerBar`). Le nœud que
@@ -150,7 +149,20 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const advanceQueueRef = useRef<() => void>(() => {});
 
   const mountYoutubePlayer = useCallback((videoId: string) => {
+    // Capturé de façon synchrone, avant tout `await` : lu dans le même tick que l'appel,
+    // donc forcément la valeur en vigueur au moment de CETTE résolution.
+    const token = requestTokenRef.current;
+
     void loadYoutubeIframeApi().then(() => {
+      // Chargement du script YouTube pas instantané au premier appel (vrai réseau) : une
+      // lecture plus récente peut avoir pris le relais entretemps. Sans ce garde, le
+      // montage tardif d'une piste déjà abandonnée pouvait faire réapparaître un lecteur
+      // pour la piste précédente après avoir enchaîné sur une piste sans correspondance
+      // — défaut réel observé en e2e, intermittent car dépendant du réseau.
+      if (requestTokenRef.current !== token) {
+        return;
+      }
+
       if (!window.YT) {
         return;
       }
@@ -420,47 +432,6 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     [applyResolution],
   );
 
-  const pasteUrl = useCallback(
-    async (url: string): Promise<boolean> => {
-      const before = stateRef.current;
-      if (before.status !== 'unresolved') {
-        return false;
-      }
-
-      const response = await fetch('/api/provider-urls/validate', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ url, trackId: before.track.id || undefined }),
-      });
-
-      if (!response.ok) {
-        return false;
-      }
-
-      const data = (await response.json()) as
-        | { provider: 'youtube'; videoId: string }
-        | { provider: 'spotify'; entityType: 'track' | 'album'; spotifyId: string };
-
-      const track = before.track;
-      currentTrackIdRef.current = track.id;
-
-      if (data.provider === 'youtube') {
-        updateState({ status: 'playing_youtube', track, videoId: data.videoId });
-        mountYoutubePlayer(data.videoId);
-      } else {
-        updateState({
-          status: 'playing_spotify',
-          track,
-          entityType: data.entityType,
-          spotifyId: data.spotifyId,
-        });
-      }
-
-      return true;
-    },
-    [mountYoutubePlayer],
-  );
-
   const close = useCallback(() => {
     stopYoutubePlayer();
     currentTrackIdRef.current = null;
@@ -471,7 +442,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   return (
     <PlaybackContext.Provider
-      value={{ state, playTrack, playAlbum, playFromRadio, pasteUrl, close, setYoutubeContainer }}
+      value={{ state, playTrack, playAlbum, playFromRadio, close, setYoutubeContainer }}
     >
       {children}
     </PlaybackContext.Provider>
