@@ -196,6 +196,11 @@ export const fr = {
   'settings.spotify.status.unset': 'Vous n’avez pas encore répondu.',
   'settings.spotify.change': 'Modifier',
 
+  // « Now Spinning » — disque qui tourne en fond, mode plein écran TV (demande produit 2026-09-03)
+  'nowSpinning.open': 'Afficher « Now Spinning » en plein écran',
+  'nowSpinning.exit': 'Quitter le plein écran',
+  'nowSpinning.region': 'Now Spinning',
+
   // Couverture vidéo de la collection (demande produit 2026-09-03)
   'settings.coverage.title': 'Couverture vidéo',
   'settings.coverage.explanation':

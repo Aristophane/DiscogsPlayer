@@ -381,6 +381,42 @@ test('le lecteur se replie sans interrompre la vidéo (Lot 6bis)', async ({ page
   await expect(video).toBeVisible();
 });
 
+test('« Now Spinning » apparaît pendant la lecture, même le lecteur replié, et s’ouvre en plein écran', async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.goto('/collection');
+
+  // Rien avant toute lecture : « pendant la lecture » (demande produit), pas en
+  // permanence.
+  const disc = page.getByRole('button', { name: 'Afficher « Now Spinning » en plein écran' });
+  await expect(disc).toHaveCount(0);
+
+  await page.goto(`/sorties/${releaseWithVideoId}`);
+  await page.getByRole('button', { name: 'Lire l’album' }).click();
+  await expect(page.getByRole('region', { name: 'Lecture en cours' })).toBeVisible();
+
+  await expect(disc).toBeVisible();
+
+  // Replier la barre du lecteur ne doit pas faire disparaître le disque d'ambiance :
+  // c'est justement l'intérêt de le sortir de la barre elle-même.
+  await page.getByRole('button', { name: 'Replier le lecteur' }).click();
+  await expect(disc).toBeVisible();
+
+  await disc.click();
+
+  const fullscreenRegion = page.getByRole('region', { name: 'Now Spinning' });
+  await expect(fullscreenRegion).toBeVisible();
+  // Le titre de piste n'est affiché que si la résolution le fournit ; le titre de
+  // l'édition, lui, est toujours renseigné (voir le test de persistance ci-dessus).
+  await expect(fullscreenRegion.getByText('Album Avec Vidéo')).toBeVisible();
+
+  await fullscreenRegion.getByRole('button', { name: 'Quitter le plein écran' }).click();
+  await expect(fullscreenRegion).toHaveCount(0);
+  // Le disque d'ambiance reste affiché après la sortie du plein écran.
+  await expect(disc).toBeVisible();
+});
+
 test('lire une piste sans correspondance juste après une piste résolue ne casse pas la page', async ({
   page,
 }) => {

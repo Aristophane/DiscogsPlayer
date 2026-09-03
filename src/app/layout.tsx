@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 import { DEFAULT_LOCALE, t } from '@/lib/i18n';
 import { AppHeader } from '@/modules/navigation/components/app-header';
+import { NowSpinningBackground } from '@/modules/playback/components/now-spinning';
 import { PlayerBar } from '@/modules/playback/components/player-bar';
 import { PlaybackProvider } from '@/modules/playback/playback-context';
 
@@ -32,6 +33,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           dans un segment de route (SPEC-GAPS G-17).
         */}
         <PlaybackProvider>
+          {/* Fond d'ambiance + disque « Now Spinning » (demande produit 2026-09-03) :
+              avant l'en-tête pour rester sous lui à z-index égal, l'ordre du DOM ne
+              change rien d'autre — la pile négative du composant le maintient sous
+              tout contenu normal quel que soit cet ordre. */}
+          <NowSpinningBackground />
           <AppHeader />
           {/*
             L'espace réservé suit la hauteur réelle de la barre de lecture (variable CSS

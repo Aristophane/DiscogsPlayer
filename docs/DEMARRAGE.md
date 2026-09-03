@@ -582,6 +582,64 @@ la couverture pendant un import plutôt que de la surestimer.
 — persistance du lecteur à travers une navigation, couverture vidéo affichée dans les
 paramètres — mobile/tablette/desktop).
 
+## « Now Spinning », 2026-09-03
+
+Demande produit verbatim : « pendant la lecture il faut mettre en background de
+l'interface principale un mode "Now Spinning", on voit le disque tourner avec le recto
+de la pochette (clicable pour afficher le verso). Et on peut accéder à un mode plein
+écran où on ne voit plus que ça. » Deux décisions tranchées avec l'utilisateur avant
+d'écrire du code (§24) :
+
+- **Emplacement** : un fond visuel derrière toute l'application (pas seulement dans la
+  barre du lecteur), au choix explicite de l'utilisateur plutôt que l'option la plus
+  simple à livrer.
+- **Verso de la pochette** : retiré du périmètre. Seule `primaryImageUrl` (recto) est
+  aujourd'hui récupérée et stockée — Discogs ne qualifie pas fiablement quelle image
+  d'une édition est le verso, et rien n'est encore stocké au-delà du recto. Ajouter le
+  retournement suppose une vraie source de données (migration, re-fetch), pas encore
+  demandée : le clic « afficher le verso » n'existe donc pas dans cette version.
+
+**Nouveau composant** `playback/components/now-spinning.tsx`, monté une fois dans le
+layout racine à côté de `PlayerBar` — indépendant d'elle : le disque reste affiché même
+le lecteur replié, c'est justement l'intérêt de l'avoir sorti de la barre. Deux parties :
+
+- Un wash d'ambiance quasi invisible (8 % d'opacité, flou important) derrière toute
+  l'application, `position: fixed` et **z-index négatif** — c'est ce qui garantit qu'il
+  reste sous tout contenu normal quel que soit l'ordre du DOM (les éléments non
+  positionnés se peignent au-dessus d'un descendant à z-index négatif, avant tout
+  élément positionné à z-index ≥ 0 — un `z-index: 0` explicite, lui, se serait peint
+  au-dessus du contenu de page, pas en dessous). Un aplat net aurait cassé le contraste
+  texte vérifié par axe sur la grille collection ou une longue liste de pistes (§20.2) ;
+  vérifié par la suite e2e existante, qui scanne déjà ces écrans pendant une lecture
+  active sans qu'aucune violation critique ou sérieuse n'apparaisse.
+- Un disque d'ambiance net et opaque, modeste (72 px), ancré sous l'en-tête à droite —
+  jamais en bas : la barre du lecteur y occupe déjà toute la largeur, repliée ou non
+  (SPEC-GAPS G-17). Toujours visible, y compris sur mobile (pas de masquage sous `sm:`) :
+  le plein écran doit rester atteignable depuis un téléphone aussi, pas seulement au-delà
+  d'un certain gabarit.
+
+Le disque lui-même (`Disc`, composant interne, réutilisé aux deux tailles) : un dégradé
+radial répété simule les sillons du vinyle, en CSS pur plutôt qu'une image — net à 72 px
+comme à 480 px en plein écran. La pochette (recto, `AlbumCover`, avec son propre repli
+déjà existant pour une image manquante ou en échec) occupe le centre comme une étiquette.
+La rotation (`@keyframes now-spinning-rotate`, `globals.css`, 8 s/tour purement
+décoratif) est coupée par `animation-play-state` hors lecture effective (`loading`,
+`unresolved`, `error` : le disque reste visible mais immobile, pour ne jamais laisser
+croire qu'un son coule alors que ce n'est pas le cas) — et par la règle globale
+`prefers-reduced-motion` déjà en place, comme toute animation de l'application.
+
+Le mode plein écran (clic sur le disque d'ambiance) utilise la vraie API Fullscreen du
+navigateur (`requestFullscreen`), avec un repli : l'échec de l'appel (contexte non
+sécurisé, refus) est avalé, le calque `position: fixed; inset: 0` affiché quoi qu'il
+arrive suffit à occuper tout le viewport même sans elle. L'état suit aussi
+`fullscreenchange` (touche Échap, contrôle natif) plutôt que seulement le bouton de
+fermeture — sinon l'interface resterait convaincue d'être en plein écran après une sortie
+décidée par le système. Si la lecture s'arrête pendant que le plein écran est ouvert, il
+se ferme de lui-même : un disque figé occupant tout l'écran n'aurait plus de sens.
+
+228 tests inchangés, 90 tests e2e (87 + 1 nouveau — apparition pendant la lecture, encore
+visible lecteur replié, ouverture/fermeture du plein écran — mobile/tablette/desktop).
+
 ## Ordonnancement conseillé ensuite
 
 L'ordre des lots de §24 est bon, avec deux ajustements issus de l'analyse :

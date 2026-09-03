@@ -71,6 +71,23 @@ body {
   height: 100%;
 }
 
+/*
+ * Disque « Now Spinning » (playback/components/now-spinning.tsx).
+ *
+ * Vitesse purement décorative (8 s/tour), pas les 33⅓ tr/min réels d'un vinyle — bien
+ * trop rapide pour un élément d'ambiance à l'écran, et sans rapport avec le tempo réel
+ * de la piste (inconnu ici). Coupée par la règle `prefers-reduced-motion` ci-dessous,
+ * comme toute animation de l'application.
+ */
+@keyframes now-spinning-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.now-spinning-disc {
+  animation: now-spinning-rotate 8s linear infinite;
+}
+
 /* §20.2 : réduction des animations à la demande de l'utilisateur. */
 @media (prefers-reduced-motion: reduce) {
   *,
