@@ -4,7 +4,7 @@ import logo from '../../../public/logo.png';
 
 /**
  * Logo (choisi par l'utilisateur, 2026-09-03) : un « D » dont le corps porte un
- * triangle de lecture en négatif — Diggers, lecteur de collection Discogs.
+ * triangle de lecture en négatif — Dig, lecteur de collection Discogs.
  *
  * Asset local (`public/logo.png`, noir sur fond transparent) plutôt qu'un tracé refait à
  * la main : la fidélité à l'image fournie l'exige, ce qu'une approximation SVG n'aurait
