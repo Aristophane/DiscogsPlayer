@@ -145,28 +145,9 @@ export function RandomDrawer({
         </p>
       ) : null}
 
-      <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-medium">{t('random.filters.title')}</h2>
-        <FacetGroup
-          legend={t('collection.filters.genres')}
-          facets={facets.genres}
-          selected={genres}
-          onToggle={(value) => toggle(genres, setGenres, value)}
-        />
-        <FacetGroup
-          legend={t('collection.filters.styles')}
-          facets={facets.styles}
-          selected={styles}
-          onToggle={(value) => toggle(styles, setStyles, value)}
-        />
-        <p className="text-sm text-muted">
-          {filtered ? null : `${t('random.filters.none')} — `}
-          {session
-            ? t('random.progress', { drawn: session.drawnCount, total: session.eligibleCount })
-            : t('random.eligible', { count: initialEligible })}
-        </p>
-      </section>
-
+      {/* Sous le bouton, avant les filtres (demande produit 2026-09-03) : le résultat
+          d'un tirage est ce qu'on est venu voir, pas un réglage à faire défiler pour
+          l'atteindre. */}
       <div aria-live="polite" className="flex flex-col gap-3">
         {exhausted ? (
           <div className="flex flex-col gap-1 rounded-md border border-border p-4">
@@ -210,6 +191,28 @@ export function RandomDrawer({
       </div>
 
       <p className="text-sm text-muted">{t('random.noAutoplay')}</p>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-lg font-medium">{t('random.filters.title')}</h2>
+        <FacetGroup
+          legend={t('collection.filters.genres')}
+          facets={facets.genres}
+          selected={genres}
+          onToggle={(value) => toggle(genres, setGenres, value)}
+        />
+        <FacetGroup
+          legend={t('collection.filters.styles')}
+          facets={facets.styles}
+          selected={styles}
+          onToggle={(value) => toggle(styles, setStyles, value)}
+        />
+        <p className="text-sm text-muted">
+          {filtered ? null : `${t('random.filters.none')} — `}
+          {session
+            ? t('random.progress', { drawn: session.drawnCount, total: session.eligibleCount })
+            : t('random.eligible', { count: initialEligible })}
+        </p>
+      </section>
     </div>
   );
 }
