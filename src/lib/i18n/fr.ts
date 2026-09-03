@@ -1,6 +1,8 @@
 /** Catalogue français — locale de référence (SPECIFICATION.md §29). */
 export const fr = {
-  'app.name': 'Discogs Player',
+  'app.name': 'Diggers',
+  /** Sous-titre affiché sous le nom (en-tête, accueil) : ce qu'est l'application. */
+  'app.subtitle': 'Discogs Player',
   'app.tagline': 'Votre collection Discogs, écoutable.',
 
   'home.intro':

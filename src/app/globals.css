@@ -37,6 +37,18 @@
   }
 }
 
+/*
+ * Logo (`lib/ui/logo.tsx`) : `public/logo.png` est un aplat noir sur fond transparent,
+ * fourni tel quel — un aplat fixe serait invisible sur le fond sombre de l'application.
+ * Inversé en thème sombre plutôt que refait en deux fichiers : le noir pur devient du
+ * blanc pur par `invert(1)`, sans toucher au canal alpha (la transparence reste intacte).
+ */
+@media (prefers-color-scheme: dark) {
+  .logo-image {
+    filter: invert(1);
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

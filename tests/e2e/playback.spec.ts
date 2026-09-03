@@ -235,7 +235,7 @@ test('le lecteur survit à une navigation vers Radio depuis l’accueil (SPEC-GA
   // `page.goto` déclenche lui-même une vraie navigation plein document — pas ce qu'on
   // veut vérifier ici. On rejoint l'accueil par un clic sur un lien déjà à l'écran,
   // pour rester dans une navigation côté client de bout en bout.
-  await page.getByRole('link', { name: 'Discogs Player' }).click();
+  await page.getByRole('link', { name: 'Diggers' }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(player).toBeVisible();
 

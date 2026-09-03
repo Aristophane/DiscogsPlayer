@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import { t, type MessageKey } from '@/lib/i18n';
+import { Logo } from '@/lib/ui/logo';
 
 /**
  * En-tête d'accès aux différentes parties de l'application (§7.2, étendu).
@@ -52,7 +53,11 @@ export function AppHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-        <Link href="/" className="shrink-0 text-sm font-semibold tracking-tight sm:text-base">
+        <Link
+          href="/"
+          className="flex shrink-0 items-center gap-2 text-sm font-semibold tracking-tight sm:text-base"
+        >
+          <Logo size={22} />
           {t('app.name')}
         </Link>
 

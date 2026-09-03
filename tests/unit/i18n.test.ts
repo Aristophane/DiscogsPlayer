@@ -5,7 +5,7 @@ import { t } from '@/lib/i18n';
 
 describe('i18n', () => {
   it('retourne la chaîne du catalogue français', () => {
-    expect(t('app.name')).toBe('Discogs Player');
+    expect(t('app.name')).toBe('Diggers');
   });
 
   it('interpole les valeurs nommées', () => {

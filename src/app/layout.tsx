@@ -10,7 +10,7 @@ import { PlaybackProvider } from '@/modules/playback/playback-context';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: t('app.name'),
+  title: `${t('app.name')} — ${t('app.subtitle')}`,
   description: t('app.tagline'),
 };
 

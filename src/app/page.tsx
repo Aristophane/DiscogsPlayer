@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { t } from '@/lib/i18n';
+import { Logo } from '@/lib/ui/logo';
 import { getCurrentUser } from '@/modules/auth/current-user';
 import { SpotifyPreferenceToggle } from '@/modules/auth/components/spotify-preference';
 import { countCollection } from '@/modules/collection/service';
@@ -19,7 +20,13 @@ export default async function HomePage() {
   if (!user) {
     return (
       <main className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center gap-6 px-6 py-16">
-        <h1 className="text-3xl font-semibold tracking-tight">{t('app.name')}</h1>
+        <div className="flex items-center gap-3">
+          <Logo size={40} />
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight">{t('app.name')}</h1>
+            <p className="text-sm text-muted">{t('app.subtitle')}</p>
+          </div>
+        </div>
         <p className="text-lg text-muted">{t('app.tagline')}</p>
         <p className="text-sm text-muted">{t('home.intro')}</p>
         <Link
