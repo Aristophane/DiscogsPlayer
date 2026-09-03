@@ -14,6 +14,8 @@ export const fr = {
   'nav.radio': 'Radio',
   'nav.playing': 'Lecture en cours',
   'nav.settings': 'Paramètres',
+  'nav.menu.open': 'Ouvrir le menu',
+  'nav.menu.close': 'Fermer le menu',
 
   // Connexion (§6.1, §19.3 : la transparence est affichée avant l'autorisation)
   'signin.title': 'Se connecter',

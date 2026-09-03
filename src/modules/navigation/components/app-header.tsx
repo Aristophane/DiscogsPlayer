@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -12,9 +13,14 @@ import { t, type MessageKey } from '@/lib/i18n';
  * pour l'accès direct depuis n'importe quel écran, y compris la fiche album et l'import,
  * que la barre basse ne couvre pas. Radio est un lien actif depuis le Lot 6 (ADR-0006).
  *
- * Sur petit mobile, le nom complet de l'application et quatre liens ne tiennent pas sur
- * une seule ligne sans déborder (vérifié à 390 px) : la nav défile horizontalement plutôt
- * que de passer à la ligne, qui écrasait le contenu suivant.
+ * Menu déroulant sous `sm:` (défaut Lot 6bis corrigé) : cinq liens sur une seule ligne
+ * défilante avaient un défaut réel, pas seulement esthétique — mesuré à 320-390 px,
+ * l'utilisateur devait faire défiler ~200 px pour atteindre « Radio » et
+ * « Paramètres », qui restaient hors écran par défaut (un simple dégradé à droite ne
+ * suffisait pas à le rendre visible). Un bouton ☰ ouvre désormais un panneau vertical
+ * qui liste tout, sans défilement caché. À partir de `sm:` (640 px), les cinq liens
+ * tiennent sur une ligne sans défilement (vérifié) : la nav horizontale d'origine
+ * reste inchangée à cette taille.
  */
 const LINKS: { href: string; labelKey: MessageKey }[] = [
   { href: '/', labelKey: 'nav.home' },
@@ -26,6 +32,17 @@ const LINKS: { href: string; labelKey: MessageKey }[] = [
 
 export function AppHeader() {
   const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  // Filet de sécurité au-delà du `onClick` de chaque lien (qui referme déjà le panneau) :
+  // couvre aussi la navigation par bouton précédent/suivant du navigateur. Ajustée
+  // pendant le rendu plutôt que dans un effet — le correctif recommandé par React pour
+  // « réinitialiser un état quand une prop change », sans re-rendu supplémentaire après
+  // montage (react-hooks/set-state-in-effect).
+  const [previousPathname, setPreviousPathname] = useState(pathname);
+  if (pathname !== previousPathname) {
+    setPreviousPathname(pathname);
+    setMobileOpen(false);
+  }
 
   // Pas d'en-tête sur l'écran de connexion : sa mise en page est volontairement seule (§6.1).
   if (pathname === '/connexion') {
@@ -34,42 +51,67 @@ export function AppHeader() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background">
-      <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <Link href="/" className="shrink-0 text-sm font-semibold tracking-tight sm:text-base">
           {t('app.name')}
         </Link>
 
-        {/* `relative`/dégradé : sur petit mobile, les quatre liens ne tiennent jamais sur
-            une ligne (vérifié à 390 px) ; le fondu à droite indique qu'on peut défiler,
-            sans quoi "Paramètres" coupé net pouvait passer pour une erreur de mise en page. */}
-        <div className="relative min-w-0 flex-1">
-          <nav
-            aria-label={t('app.name')}
-            className="flex items-center gap-1 overflow-x-auto whitespace-nowrap"
-          >
-            {LINKS.map((link) => {
-              const active = pathname === link.href;
+        <nav aria-label={t('app.name')} className="hidden items-center gap-1 sm:flex">
+          {LINKS.map((link) => {
+            const active = pathname === link.href;
 
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  aria-current={active ? 'page' : undefined}
-                  className={`shrink-0 rounded-md px-2.5 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current sm:px-3 ${
-                    active ? 'bg-surface font-medium' : 'text-muted'
-                  }`}
-                >
-                  {t(link.labelKey)}
-                </Link>
-              );
-            })}
-          </nav>
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-background to-transparent"
-          />
-        </div>
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                aria-current={active ? 'page' : undefined}
+                className={`shrink-0 rounded-md px-2.5 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current sm:px-3 ${
+                  active ? 'bg-surface font-medium' : 'text-muted'
+                }`}
+              >
+                {t(link.labelKey)}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <button
+          type="button"
+          onClick={() => setMobileOpen((value) => !value)}
+          aria-expanded={mobileOpen}
+          aria-controls="mobile-nav-panel"
+          aria-label={mobileOpen ? t('nav.menu.close') : t('nav.menu.open')}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border text-base sm:hidden"
+        >
+          <span aria-hidden="true">{mobileOpen ? '✕' : '☰'}</span>
+        </button>
       </div>
+
+      {mobileOpen ? (
+        <nav
+          id="mobile-nav-panel"
+          aria-label={t('app.name')}
+          className="flex flex-col gap-1 border-t border-border px-4 py-2 sm:hidden"
+        >
+          {LINKS.map((link) => {
+            const active = pathname === link.href;
+
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                aria-current={active ? 'page' : undefined}
+                onClick={() => setMobileOpen(false)}
+                className={`rounded-md px-2.5 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current ${
+                  active ? 'bg-surface font-medium' : 'text-muted'
+                }`}
+              >
+                {t(link.labelKey)}
+              </Link>
+            );
+          })}
+        </nav>
+      ) : null}
     </header>
   );
 }

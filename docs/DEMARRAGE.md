@@ -436,6 +436,31 @@ le viewport réel, pas `fullPage`.
 203 tests unitaires et d'intégration (inchangé), 72 tests e2e
 (mobile/tablette/desktop).
 
+## Menu mobile de l'en-tête, 2026-09-03
+
+Suite explicite de la demande précédente (« règle le problème du header responsive »).
+La nav horizontale défilante (déjà documentée comme un choix délibéré) cachait en
+réalité « Radio » et « Paramètres » hors écran par défaut sur tout mobile courant —
+mesuré, pas supposé : à 320-390 px, `nav.scrollWidth` (383 px) dépassait largement
+`nav.clientWidth` (189 à 259 px selon la largeur), et Radio, la porte d'entrée la plus
+travaillée de toute cette session, n'apparaissait dans aucune capture d'écran sans
+défiler d'abord.
+
+Remplacée sous `sm:` (640 px, seuil où les cinq liens tiennent déjà sans défilement,
+vérifié) par un bouton ☰ ouvrant un panneau vertical qui les liste tous d'un coup,
+sans rien de caché. Fermeture au clic sur un lien, et par sécurité à tout changement de
+route (bouton précédent/suivant du navigateur inclus) — ajustée pendant le rendu, pas
+dans un effet (`react-hooks/set-state-in-effect`), le correctif que React documente
+lui-même pour ce cas précis.
+
+Nouveau test e2e à 320 px : les cinq liens, dont Radio, tous visibles d'un coup après
+ouverture du panneau, sans défilement caché. Le test d'en-tête existant, qui vérifiait
+une nav toujours visible, ouvre désormais le panneau au préalable quand le bouton
+existe — inchangé au-dessus de `sm:`, où il n'apparaît pas.
+
+203 tests unitaires et d'intégration (inchangé), 75 tests e2e
+(mobile/tablette/desktop).
+
 ## Ordonnancement conseillé ensuite
 
 L'ordre des lots de §24 est bon, avec deux ajustements issus de l'analyse :

@@ -135,13 +135,21 @@ test('l’en-tête donne accès aux sections principales sans déborder', async 
   await page.goto('/collection');
 
   const header = page.getByRole('banner');
+  // Sous `sm:`, les liens sont dans un panneau replié par défaut (Lot 6bis) : l'ouvrir
+  // avant de vérifier leur présence. Ce bouton n'existe pas dans l'arbre d'accessibilité
+  // visible au-dessus de `sm:` (`sm:hidden`) — la nav horizontale y suffit déjà.
+  const menuToggle = header.getByRole('button', { name: 'Ouvrir le menu' });
+  if (await menuToggle.isVisible()) {
+    await menuToggle.click();
+  }
+
   await expect(header.getByRole('link', { name: 'Accueil' })).toBeVisible();
   await expect(header.getByRole('link', { name: 'Collection' })).toBeVisible();
   await expect(header.getByRole('link', { name: 'Aléatoire' })).toBeVisible();
+  await expect(header.getByRole('link', { name: 'Radio' })).toBeVisible();
   await expect(header.getByRole('link', { name: 'Paramètres' })).toBeVisible();
 
-  // Aucun débordement horizontal de la page (§20.1 : la nav défile dans son propre
-  // conteneur plutôt que de casser la mise en page sur petit mobile).
+  // Aucun débordement horizontal de la page (§20.1), avec ou sans le panneau ouvert.
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
   );
@@ -151,6 +159,42 @@ test('l’en-tête donne accès aux sections principales sans déborder', async 
     body: await page.screenshot(),
     contentType: 'image/png',
   });
+});
+
+test('le menu mobile de l’en-tête liste tout sans défilement caché (Lot 6bis)', async ({
+  page,
+}) => {
+  // 320 px : sous `sm:` (640 px), pas le préréglage « mobile » (Pixel 7, 412 px). C'est
+  // à cette largeur que le défaut a été mesuré — la nav horizontale précédente exigeait
+  // ~200 px de défilement pour atteindre « Radio » et « Paramètres », hors écran par
+  // défaut, sans autre indice visuel qu'un léger dégradé.
+  await page.setViewportSize({ width: 320, height: 700 });
+  await signIn(page);
+  await page.goto('/collection');
+
+  const header = page.getByRole('banner');
+  await expect(header.getByRole('link', { name: 'Radio' })).toHaveCount(0);
+
+  const toggle = header.getByRole('button', { name: 'Ouvrir le menu' });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.click();
+
+  await expect(header.getByRole('button', { name: 'Fermer le menu' })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
+  // Les cinq liens, tous visibles d'un coup, sans avoir à défiler.
+  for (const name of ['Accueil', 'Collection', 'Aléatoire', 'Radio', 'Paramètres']) {
+    await expect(header.getByRole('link', { name })).toBeVisible();
+  }
+
+  await header.getByRole('link', { name: 'Radio' }).click();
+  await expect(page).toHaveURL(/\/radio/);
+  // La navigation referme le panneau (filet de sécurité par changement de route).
+  await expect(header.getByRole('button', { name: 'Ouvrir le menu' })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
 });
 
 test('le bouton play d’un album résout depuis la vidéo Discogs, sans écran de disponibilité', async ({
