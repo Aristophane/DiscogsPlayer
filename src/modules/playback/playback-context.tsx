@@ -31,7 +31,17 @@ type Unresolved = {
 
 export type PlaybackState =
   | { status: 'idle' }
-  | { status: 'loading'; track: TrackMeta }
+  | {
+      status: 'loading';
+      track: TrackMeta;
+      /**
+       * `tracklist_pending` : l'édition n'a pas encore ses pistes (import en arrière-plan
+       * pas terminé), une récupération prioritaire est en cours (Lot 6bis). Distingue ce
+       * qui peut prendre plusieurs secondes d'une résolution normale, pour que le lecteur
+       * affiche un message et une animation adaptés plutôt qu'un chargement générique.
+       */
+      reason?: 'tracklist_pending';
+    }
   | { status: 'playing_youtube'; track: TrackMeta; videoId: string }
   | {
       status: 'playing_spotify';
@@ -70,7 +80,7 @@ type ResolutionResponse = {
     | { status: 'resolved'; provider: 'youtube'; videoId: string; title: string | null }
     | { status: 'resolved'; provider: 'spotify'; embedType: 'track' | 'album'; spotifyId: string }
     | ({ status: 'unresolved' } & Unresolved);
-  status?: 'empty' | 'next' | 'end_of_album' | 'track' | 'exhausted' | 'unavailable';
+  status?: 'empty' | 'pending' | 'next' | 'end_of_album' | 'track' | 'exhausted' | 'unavailable';
 };
 
 async function postJson(url: string, body: unknown): Promise<ResolutionResponse | null> {
@@ -86,6 +96,18 @@ async function postJson(url: string, body: unknown): Promise<ResolutionResponse 
 
   return (await response.json()) as ResolutionResponse;
 }
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Cadence et patience du sondage pendant qu'une édition récupère ses pistes en priorité
+ * (`status: 'pending'`, Lot 6bis). ~15 s au total : au-delà, mieux vaut laisser
+ * l'utilisateur réessayer que le faire attendre indéfiniment devant une animation.
+ */
+const TRACKLIST_PENDING_POLL_INTERVAL_MS = 1_500;
+const TRACKLIST_PENDING_POLL_MAX_ATTEMPTS = 10;
 
 export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<PlaybackState>({ status: 'idle' });
@@ -110,6 +132,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // choisie explicitement ailleurs (playTrack/playAlbum) efface cette ref — quitter la
   // Radio en cliquant autre chose est le comportement attendu, pas un mode à confirmer.
   const activeRadioSessionRef = useRef<string | null>(null);
+  // Incrémenté par toute demande de lecture explicite (playTrack/playAlbum/playFromRadio)
+  // ou par `close()`. Le sondage de `playAlbum` pendant un `status: 'pending'` compare ce
+  // compteur avant d'appliquer chaque résultat : si l'utilisateur a demandé autre chose
+  // entre-temps, la réponse tardive du sondage ne doit rien écraser.
+  const requestTokenRef = useRef(0);
 
   function updateState(next: PlaybackState): void {
     stateRef.current = next;
@@ -282,6 +309,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       // Choisir explicitement une piste ailleurs met fin à la Radio en cours, sans
       // confirmation à demander : c'est le comportement attendu d'un clic délibéré.
       activeRadioSessionRef.current = null;
+      requestTokenRef.current += 1;
       updateState({
         status: 'loading',
         track: {
@@ -311,28 +339,53 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const playAlbum = useCallback(
     async (discogsReleaseId: string) => {
       activeRadioSessionRef.current = null;
-      updateState({
-        status: 'loading',
-        track: {
-          id: '',
-          ordinal: 0,
-          releaseId: '',
-          discogsReleaseId,
-          releaseTitle: '',
-          artists: '',
-          coverUrl: null,
-        },
-      });
+      const token = (requestTokenRef.current += 1);
+      const placeholderTrack: TrackMeta = {
+        id: '',
+        ordinal: 0,
+        releaseId: '',
+        discogsReleaseId,
+        releaseTitle: '',
+        artists: '',
+        coverUrl: null,
+      };
+      updateState({ status: 'loading', track: placeholderTrack });
 
-      const response = await postJson('/api/resolutions/album', { discogsReleaseId });
-      if (!response) {
-        if (stateRef.current.status === 'loading') {
-          updateState({ status: 'error', track: stateRef.current.track });
+      // `status: 'pending'` (§4.2, Lot 6bis) : l'édition n'a pas encore ses pistes. Une
+      // récupération prioritaire vient d'être programmée côté serveur — on sonde jusqu'à
+      // ce qu'elle aboutisse plutôt que de renvoyer un échec immédiat, pour que « cliquer
+      // play » favorise vraiment la lecture au lieu d'exiger un second clic une fois
+      // l'import terminé.
+      for (let attempt = 0; attempt <= TRACKLIST_PENDING_POLL_MAX_ATTEMPTS; attempt += 1) {
+        const response = await postJson('/api/resolutions/album', { discogsReleaseId });
+
+        // Une autre lecture (ou une fermeture) a été demandée pendant l'attente : cette
+        // réponse, même valide, ne correspond plus à ce que l'utilisateur veut voir.
+        if (requestTokenRef.current !== token) {
+          return;
         }
-        return;
-      }
 
-      applyResolution(response);
+        if (!response) {
+          updateState({ status: 'error', track: placeholderTrack });
+          return;
+        }
+
+        if (response.status !== 'pending') {
+          applyResolution(response);
+          return;
+        }
+
+        if (attempt === 0) {
+          updateState({ status: 'loading', track: placeholderTrack, reason: 'tracklist_pending' });
+        }
+
+        if (attempt === TRACKLIST_PENDING_POLL_MAX_ATTEMPTS) {
+          updateState({ status: 'error', track: placeholderTrack });
+          return;
+        }
+
+        await sleep(TRACKLIST_PENDING_POLL_INTERVAL_MS);
+      }
     },
     [applyResolution],
   );
@@ -340,6 +393,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const playFromRadio = useCallback(
     async (radioSessionId: string) => {
       activeRadioSessionRef.current = radioSessionId;
+      requestTokenRef.current += 1;
       updateState({
         status: 'loading',
         track: {
@@ -411,6 +465,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     stopYoutubePlayer();
     currentTrackIdRef.current = null;
     activeRadioSessionRef.current = null;
+    requestTokenRef.current += 1;
     updateState({ status: 'idle' });
   }, [stopYoutubePlayer]);
 

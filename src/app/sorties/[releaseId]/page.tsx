@@ -7,16 +7,21 @@ import {
   formatFormats,
   getReleaseForUser,
 } from '@/modules/catalog/release-service';
+import { TracklistPending } from '@/modules/catalog/components/tracklist-pending';
 import { AlbumCover } from '@/modules/collection/components/album-cover';
 import { coverProxyUrl } from '@/modules/collection/cover';
 import { PlayButton } from '@/modules/playback/components/play-button';
+import { requestPriorityReleaseFetch } from '@/modules/sync/service';
 
 /**
  * Fiche album (§7.4).
  *
- * Aucune résolution de média n'est déclenchée par l'affichage de cette page (§4.2) : elle
- * ne montre que ce qui est déjà connu. La résolution n'a lieu qu'au clic sur un bouton
- * play — album (première piste) ou piste précise — géré par `PlaybackProvider`.
+ * Aucune résolution de **média** n'est déclenchée par l'affichage de cette page (§4.2) :
+ * elle ne montre que ce qui est déjà connu, et le clic sur un bouton play reste seul à
+ * lancer une recherche YouTube/Spotify. Distinct de la récupération des métadonnées
+ * Discogs (titre, pistes) ci-dessous : ce n'est pas une résolution de média, et
+ * l'attendre passivement derrière l'import en arrière-plan desservirait justement
+ * l'objectif de §4.2, qui est de favoriser la lecture (Lot 6bis).
  */
 export default async function ReleasePage({ params }: { params: Promise<{ releaseId: string }> }) {
   const user = await getCurrentUser();
@@ -34,6 +39,16 @@ export default async function ReleasePage({ params }: { params: Promise<{ releas
   const cover = coverProxyUrl(release.coverUrl);
   const formats = formatFormats(release.formats);
   const playable = release.tracks.filter((track) => track.type !== 'heading');
+
+  // Distinct de « aucune piste » au sens strict (une édition en a toujours dans les cas
+  // réels) : `detailsFetchedAt` porte le sens exact, `tracks.length` ne suffit pas seul —
+  // une fiche déjà chargée normalement ne doit jamais redéclencher de récupération.
+  const tracksPending = playable.length === 0 && release.detailsFetchedAt === null;
+  if (tracksPending) {
+    // Visiter la fiche est un signal d'intérêt aussi explicite qu'un clic play : fait
+    // passer cette édition devant la file d'import en arrière-plan (Lot 6bis).
+    await requestPriorityReleaseFetch(release.discogsReleaseId);
+  }
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 py-8 sm:px-6">
@@ -102,7 +117,9 @@ export default async function ReleasePage({ params }: { params: Promise<{ releas
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-medium">{t('release.tracklist')}</h2>
 
-        {playable.length === 0 ? (
+        {tracksPending ? (
+          <TracklistPending discogsReleaseId={release.discogsReleaseId} />
+        ) : playable.length === 0 ? (
           <p className="text-sm text-muted">{t('release.tracks.none')}</p>
         ) : (
           <ol className="flex flex-col divide-y divide-border">

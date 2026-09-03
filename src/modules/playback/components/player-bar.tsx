@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { t } from '@/lib/i18n';
+import { VinylSpinner } from '@/lib/ui/vinyl-spinner';
 import { AlbumCover } from '@/modules/collection/components/album-cover';
 import { coverProxyUrl } from '@/modules/collection/cover';
 
@@ -76,7 +77,7 @@ export function PlayerBar() {
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-3 sm:px-6">
         {track ? (
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 shrink-0 overflow-hidden rounded bg-surface">
+            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded bg-surface">
               <AlbumCover src={cover} title={track.releaseTitle} artists={track.artists} eager />
             </div>
 
@@ -97,8 +98,11 @@ export function PlayerBar() {
         ) : null}
 
         {state.status === 'loading' ? (
-          <p aria-live="polite" className="text-sm text-muted">
-            {t('player.loading')}
+          <p aria-live="polite" className="flex items-center gap-2 text-sm text-muted">
+            {state.reason === 'tracklist_pending' ? <VinylSpinner size={20} /> : null}
+            {state.reason === 'tracklist_pending'
+              ? t('player.loading.tracklistPending')
+              : t('player.loading')}
           </p>
         ) : null}
 

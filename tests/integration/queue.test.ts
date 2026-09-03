@@ -23,13 +23,17 @@ afterAll(async () => {
 });
 
 describe('déduplication (§12.2)', () => {
-  it('refuse une seconde tâche vivante portant la même clé', async () => {
+  it('fusionne une seconde demande sur la même clé plutôt que de la dupliquer', async () => {
     const first = await enqueue({ type: TYPE, payload: { n: 1 }, dedupeKey: 'test:release:1' });
     const second = await enqueue({ type: TYPE, payload: { n: 2 }, dedupeKey: 'test:release:1' });
 
+    // Deux utilisateurs possédant la même édition ne déclenchent qu'un seul chargement :
+    // la seconde demande met à jour la ligne existante (même id), n'en crée pas une autre.
     expect(first).not.toBeNull();
-    // Deux utilisateurs possédant la même édition ne déclenchent qu'un seul chargement.
-    expect(second).toBeNull();
+    expect(second).toBe(first);
+
+    const rows = await db.select().from(tasks).where(eq(tasks.dedupeKey, 'test:release:1'));
+    expect(rows).toHaveLength(1);
   });
 
   it('autorise une nouvelle tâche une fois la précédente terminée', async () => {
@@ -39,6 +43,7 @@ describe('déduplication (§12.2)', () => {
     const second = await enqueue({ type: TYPE, payload: {}, dedupeKey: 'test:release:2' });
 
     expect(second).not.toBeNull();
+    expect(second).not.toBe(first);
   });
 
   it('n’applique aucune déduplication sans clé', async () => {
@@ -48,6 +53,48 @@ describe('déduplication (§12.2)', () => {
     expect(first).not.toBeNull();
     expect(second).not.toBeNull();
     expect(first).not.toBe(second);
+  });
+});
+
+describe('priorité (§9.4, Lot 6bis)', () => {
+  it('fait remonter la priorité d’une tâche déjà programmée, jamais redescendre', async () => {
+    const id = await enqueue({
+      type: TYPE,
+      payload: {},
+      dedupeKey: 'test:release:priority',
+      priority: 0,
+    });
+    await enqueue({
+      type: TYPE,
+      payload: {},
+      dedupeKey: 'test:release:priority',
+      priority: 100,
+    });
+
+    const afterRaise = await db.select().from(tasks).where(eq(tasks.id, id!));
+    expect(afterRaise[0]?.priority).toBe(100);
+
+    // Une clic utilisateur suivi d'un import en arrière-plan (priorité par défaut, 0) ne
+    // doit pas faire redescendre une tâche déjà remontée.
+    await enqueue({ type: TYPE, payload: {}, dedupeKey: 'test:release:priority', priority: 0 });
+    const afterLower = await db.select().from(tasks).where(eq(tasks.id, id!));
+    expect(afterLower[0]?.priority).toBe(100);
+  });
+
+  it('sert d’abord la tâche de priorité la plus haute', async () => {
+    await enqueue({ type: TYPE, payload: { n: 'basse' }, priority: 0 });
+    const highId = await enqueue({ type: TYPE, payload: { n: 'haute' }, priority: 100 });
+
+    const [claimed] = await claim('worker', 1, { types: [TYPE] });
+    expect(claimed?.id).toBe(highId);
+  });
+
+  it('retombe sur l’ancienneté à priorité égale (FIFO par défaut)', async () => {
+    const firstId = await enqueue({ type: TYPE, payload: { n: 1 } });
+    await enqueue({ type: TYPE, payload: { n: 2 } });
+
+    const [claimed] = await claim('worker', 1, { types: [TYPE] });
+    expect(claimed?.id).toBe(firstId);
   });
 });
 

@@ -299,6 +299,44 @@ réelle — plusieurs centaines de styles à un seul exemplaire — rendant l'é
 interminable avant d'atteindre le bouton de lancement. Plafonné à 24 valeurs visibles
 par facette, une valeur déjà sélectionnée restant toujours visible.
 
+## Lot 6ter — récupération prioritaire des pistes, terminé le 2026-09-03
+
+En production, l'import d'une collection réelle ramène les albums immédiatement mais
+leurs pistes seulement au rythme du quota Discogs (~1,1 s/appel) — plusieurs minutes
+pour une grosse collection. Signalé par l'utilisateur : cliquer play sur un album pas
+encore détaillé échouait silencieusement (retour à `idle`, aucun message), et la fiche
+album affichait un texte statique sans qu'aucune action ne fasse avancer les choses.
+
+| Livrable                                        | Emplacement                                                          | Vérification                    |
+| ----------------------------------------------- | -------------------------------------------------------------------- | ------------------------------- |
+| Priorité de file (`tasks.priority`)             | `src/db/schema/tasks.ts`                                             | migration `0007`                |
+| `enqueue()` fusionne au lieu de dupliquer       | `src/modules/sync/queue.ts`                                          | 6 tests d'intégration           |
+| Récupération prioritaire déclenchée par un clic | `src/modules/sync/service.ts` (`requestPriorityReleaseFetch`)        | 2 tests d'intégration           |
+| Route de résolution album (`status: 'pending'`) | `src/app/api/resolutions/album/route.ts`                             | testée en e2e                   |
+| Sondage côté client + relance de lecture        | `src/modules/playback/playback-context.tsx`, `tracklist-pending.tsx` | e2e (spinner, priorité en base) |
+| Sonde de disponibilité                          | `src/app/api/releases/[discogsReleaseId]/status/`                    | GET qualifié par utilisateur    |
+| Animation de chargement (disque qui tourne)     | `src/lib/ui/vinyl-spinner.tsx`                                       | fiche album, lecteur, pochettes |
+
+**Critère de sortie atteint** : `enqueue()` fait remonter la priorité d'une tâche déjà
+programmée par l'import en arrière-plan sans jamais la redescendre (`greatest` en SQL,
+sur l'index unique partiel de déduplication) — vérifié par insertion concurrente en
+base, pas seulement en lisant le code. `claim()` sert désormais la priorité la plus
+haute avant l'ancienneté. Visiter une fiche album ou cliquer play sur une édition pas
+encore détaillée déclenche cette récupération prioritaire et affiche une attente
+active (animation + message), jamais un échec silencieux ni un texte figé — prouvé en
+e2e par une lecture directe de la table `tasks` après clic, pas seulement par ce que
+l'écran affiche.
+
+201 tests unitaires et d'intégration, 54 tests e2e sur mobile/tablette/desktop.
+
+### Un changement de comportement délibéré, pas une régression
+
+`enqueue()` ne renvoyait auparavant `null` que pour signaler une tâche déjà vivante —
+comportement remplacé par une fusion (même ligne mise à jour, priorité et `run_after`
+réconciliés) : nécessaire pour qu'un clic utilisateur puisse faire remonter une tâche
+que l'import avait déjà programmée à priorité normale. `tests/integration/queue.test.ts`
+a été réécrit en conséquence, pas seulement complété.
+
 ## Ordonnancement conseillé ensuite
 
 L'ordre des lots de §24 est bon, avec deux ajustements issus de l'analyse :

@@ -26,7 +26,12 @@ import {
   type DiscogsApi,
   type ReleaseDetails,
 } from '@/modules/sync/discogs-api';
-import { TASK_FETCH_RELEASE, runCollectionSync, startSync } from '@/modules/sync/service';
+import {
+  TASK_FETCH_RELEASE,
+  requestPriorityReleaseFetch,
+  runCollectionSync,
+  startSync,
+} from '@/modules/sync/service';
 
 const ALICE = { id: 991_000_001, username: 'alice_sync' };
 const BOB = { id: 991_000_002, username: 'bob_sync' };
@@ -278,6 +283,48 @@ describe('déduplication globale entre utilisateurs (§12.2)', () => {
       .where(eq(tasks.dedupeKey, `release:${R(6)}`));
 
     expect(detailTasks).toHaveLength(0);
+  });
+});
+
+describe('récupération prioritaire d’une édition (Lot 6bis)', () => {
+  it('fait passer une édition en attente devant la file d’import en arrière-plan', async () => {
+    const user = await createUser(ALICE);
+    const api = new FakeDiscogsApi([page(1, 1, [{ releaseId: R(7), instanceId: 40 }])]);
+
+    const { run } = await startSync(user.id, 'initial');
+    await runCollectionSync(run.id, api);
+
+    // L'import en arrière-plan a déjà programmé cette édition, à la priorité normale.
+    const beforeRows = await db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.dedupeKey, `release:${R(7)}`));
+    expect(beforeRows).toHaveLength(1);
+    expect(beforeRows[0]?.priority).toBe(0);
+
+    await requestPriorityReleaseFetch(R(7));
+
+    // Toujours une seule tâche vivante — remontée, pas dupliquée.
+    const afterRows = await db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.dedupeKey, `release:${R(7)}`));
+    expect(afterRows).toHaveLength(1);
+    expect(afterRows[0]?.id).toBe(beforeRows[0]?.id);
+    expect(afterRows[0]!.priority).toBeGreaterThan(0);
+  });
+
+  it('n’enqueue rien pour une édition dont les détails sont déjà frais', async () => {
+    const api = new FakeDiscogsApi([]);
+    await applyReleaseDetails(await api.getRelease(R(8)));
+
+    await requestPriorityReleaseFetch(R(8));
+
+    const rows = await db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.dedupeKey, `release:${R(8)}`));
+    expect(rows).toHaveLength(0);
   });
 });
 

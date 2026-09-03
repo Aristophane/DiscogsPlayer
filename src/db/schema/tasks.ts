@@ -36,6 +36,14 @@ export const tasks = pgTable(
     /** Validé par un schéma Zod propre au type avant exécution. */
     payload: jsonb('payload').notNull(),
     status: taskStatus('status').notNull().default('queued'),
+    /**
+     * Plus haut passe en premier (§9.4, extension Lot 6bis). `0` par défaut : la file
+     * d'import en arrière-plan reste un FIFO pur. Une tâche déclenchée par un clic
+     * utilisateur (récupération des pistes d'un album) prend une valeur plus haute pour
+     * passer devant sans pour autant contourner le régulateur de débit (§12.3) — elle
+     * reste sujette au même rythme d'appels, juste servie en priorité par le worker.
+     */
+    priority: integer('priority').notNull().default(0),
     attemptCount: integer('attempt_count').notNull().default(0),
     maxAttempts: integer('max_attempts').notNull().default(5),
     /** Backoff exponentiel avec jitter : la tâche n'est pas éligible avant cette date. */
@@ -54,8 +62,9 @@ export const tasks = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    // Ordre de réclamation : priorité décroissante puis ancienneté (`claim()`, queue.ts).
     index('tasks_claimable_idx')
-      .on(table.runAfter)
+      .on(sql`${table.priority} desc`, table.runAfter)
       .where(sql`${table.status} in ('queued', 'retry_wait')`),
     index('tasks_locked_idx')
       .on(table.lockedAt)

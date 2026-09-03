@@ -50,6 +50,13 @@
       "when": 1788371050857,
       "tag": "0006_sleepy_the_executioner",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788439575987,
+      "tag": "0007_youthful_argent",
+      "breakpoints": true
     }
   ]
 }

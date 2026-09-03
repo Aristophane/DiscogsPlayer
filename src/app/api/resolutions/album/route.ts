@@ -11,6 +11,7 @@ import { hasTrustedOrigin } from '@/modules/auth/cookies';
 import { requireUser } from '@/modules/auth/current-user';
 import { getFirstPlayableTrackId, getReleaseForUser } from '@/modules/catalog/release-service';
 import { resolveTrack } from '@/modules/resolution/service';
+import { requestPriorityReleaseFetch } from '@/modules/sync/service';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,6 +53,22 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     const trackId = await getFirstPlayableTrackId(release.releaseId);
     if (!trackId) {
+      // `detailsFetchedAt` distingue deux situations qui se ressemblent en surface mais
+      // n'appellent pas la même réponse : une édition dont l'import n'a pas encore
+      // ramené les pistes (« pending », on peut agir) d'une édition réellement sans
+      // piste connue (« empty », rare mais possible — un cas qu'un nouvel essai ne
+      // résoudra jamais).
+      if (release.detailsFetchedAt === null) {
+        // Fait passer cette édition devant la file d'import en arrière-plan (Lot 6bis) :
+        // cliquer play doit vraiment favoriser la lecture, pas seulement l'annoncer.
+        await requestPriorityReleaseFetch(release.discogsReleaseId);
+
+        return NextResponse.json(
+          { status: 'pending' },
+          { headers: { 'cache-control': 'no-store', 'x-request-id': id } },
+        );
+      }
+
       return NextResponse.json(
         { status: 'empty' },
         { headers: { 'cache-control': 'no-store', 'x-request-id': id } },

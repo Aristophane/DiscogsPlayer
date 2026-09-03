@@ -107,6 +107,9 @@ export const fr = {
   'release.availability.pending':
     'La recherche d’un média n’est lancée qu’au moment où vous choisissez une piste.',
   'release.tracks.none': 'La liste des pistes n’est pas encore chargée.',
+  'release.tracks.pending': 'Récupération des pistes en cours…',
+  'release.tracks.pending.timeout': 'Ça prend plus longtemps que prévu. Réessayez dans un instant.',
+  'release.tracks.pending.retry': 'Réessayer',
   'release.track.unknownDuration': 'Durée inconnue',
   'collection.empty': 'Votre collection est vide pour le moment.',
   'collection.count': '{count} album(s) dans votre collection.',
@@ -152,6 +155,7 @@ export const fr = {
 
   // Lecteur persistant (§7.1 /lecture, §13.6, §14.6)
   'player.loading': 'Résolution en cours…',
+  'player.loading.tracklistPending': 'Récupération des pistes de l’album…',
   'player.close': 'Fermer le lecteur',
   'player.openSpotify': 'Ouvrir dans Spotify',
   'player.openYoutubeSearch': 'Rechercher sur YouTube',

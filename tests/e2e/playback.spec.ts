@@ -18,10 +18,14 @@ const DISCOGS_USER_ID = '997000001';
 let token: string;
 let releaseWithVideoId: string;
 let releaseWithoutVideoId: string;
+let releasePendingId: string;
 
 async function cleanup() {
   await sql`delete from users where discogs_user_id = ${DISCOGS_USER_ID}`;
   await sql`delete from discogs_releases where discogs_release_id like 'test-9970%'`;
+  // Sans FK vers `discogs_releases` : la tâche de récupération prioritaire (Lot 6bis)
+  // déclenchée en visitant la fiche « en attente » doit être nettoyée à part.
+  await sql`delete from tasks where dedupe_key like 'release:test-9970%'`;
 }
 
 test.beforeAll(async () => {
@@ -87,6 +91,24 @@ test.beforeAll(async () => {
   await sql`
     insert into collection_instances (user_id, release_id, discogs_instance_id)
     values (${userId}, ${releaseB!.id}, '99700021')
+  `;
+
+  // Édition dont l'import en arrière-plan n'a pas encore ramené les pistes : aucune ligne
+  // `discogs_tracks`, `details_fetched_at` laissé à `null` (Lot 6bis).
+  const [releaseC] = await sql<{ id: string }[]>`
+    insert into discogs_releases (
+      discogs_release_id, title, artists_text, search_text, title_normalized, artists_normalized
+    ) values (
+      'test-9970003', 'Album En Attente', 'Artiste Attente',
+      'album en attente artiste attente', 'album en attente', 'artiste attente'
+    )
+    returning id
+  `;
+  releasePendingId = 'test-9970003';
+
+  await sql`
+    insert into collection_instances (user_id, release_id, discogs_instance_id)
+    values (${userId}, ${releaseC!.id}, '99700031')
   `;
 
   token = randomBytes(32).toString('base64url');
@@ -195,6 +217,32 @@ test('sans correspondance connue, le repli manuel s’affiche sans planter', asy
   await expect(page.getByRole('link', { name: 'Rechercher sur YouTube' })).toBeVisible();
   // Préférence Spotify non renseignée pour ce compte : pas de repli Spotify (ADR-0006).
   await expect(page.getByRole('link', { name: 'Rechercher sur Spotify' })).toHaveCount(0);
+});
+
+test('une édition sans pistes encore chargées affiche l’attente, pas un vide silencieux (Lot 6bis)', async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.goto(`/sorties/${releasePendingId}`);
+
+  // Pas le message statique « pas encore chargée » (répondait avant à ce même cas) :
+  // celui-ci suppose une action en cours, l'autre une simple lacune.
+  await expect(page.getByText('Récupération des pistes en cours…')).toBeVisible();
+  await expect(page.getByText('La liste des pistes n’est pas encore chargée.')).toHaveCount(0);
+
+  // La visite a fait passer cette édition devant la file d'import (§9.4, Lot 6bis) : une
+  // tâche existe, à une priorité strictement supérieure à celle de l'import ordinaire.
+  const [task] = await sql<{ priority: number; status: string }[]>`
+    select priority, status from tasks where dedupe_key = ${'release:' + releasePendingId}
+  `;
+  expect(task).toBeDefined();
+  expect(task!.priority).toBeGreaterThan(0);
+  expect(['queued', 'running', 'retry_wait']).toContain(task!.status);
+
+  // Cliquer play pendant l'attente ne renvoie pas un échec immédiat : le lecteur reste en
+  // chargement, avec un message propre à cette situation plutôt que le message générique.
+  await page.getByRole('button', { name: 'Lire l’album' }).click();
+  await expect(page.getByText('Récupération des pistes de l’album…')).toBeVisible();
 });
 
 test('le bouton play d’une tuile ne navigue pas vers la fiche album', async ({ page }) => {

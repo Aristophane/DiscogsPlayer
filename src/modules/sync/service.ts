@@ -218,6 +218,17 @@ async function processPage(
   return { seen: page.releases.length, changed, releaseIds };
 }
 
+/** Priorité normale de l'import en arrière-plan (§9.4) : un simple FIFO. */
+const PRIORITY_BACKGROUND_IMPORT = 0;
+
+/**
+ * Priorité d'une récupération demandée par un clic utilisateur (Lot 6bis) : passe devant
+ * la file d'import sans changer le rythme des appels Discogs — `enqueue()` ne fait que
+ * réordonner ce que le worker traite en premier, le régulateur de débit (`pacer.ts`,
+ * §12.3) continue de s'appliquer à chaque appel, prioritaire ou non.
+ */
+const PRIORITY_USER_REQUESTED = 100;
+
 /**
  * Programme le chargement détaillé des éditions inconnues ou périmées.
  * La clé de déduplication porte sur l'édition, pas sur l'utilisateur : deux collections
@@ -232,6 +243,7 @@ async function scheduleDetailFetches(discogsReleaseIds: string[]): Promise<numbe
       type: TASK_FETCH_RELEASE,
       payload: { discogsReleaseId },
       dedupeKey: `release:${discogsReleaseId}`,
+      priority: PRIORITY_BACKGROUND_IMPORT,
     });
 
     if (taskId) {
@@ -240,6 +252,32 @@ async function scheduleDetailFetches(discogsReleaseIds: string[]): Promise<numbe
   }
 
   return scheduled;
+}
+
+/**
+ * Fait passer la récupération d'une édition devant la file d'import en arrière-plan.
+ *
+ * Déclenchée par un clic explicite de lecture (bouton play, fiche album) sur une édition
+ * dont les pistes ne sont pas encore connues — jamais par un simple affichage, pour ne
+ * pas consommer de quota Discogs sans demande de l'utilisateur (§4.2, même principe que
+ * la résolution de piste). Sans effet si l'édition est déjà à jour : `enqueue()` ne fait
+ * remonter la priorité qu'à une tâche réellement programmée.
+ */
+export async function requestPriorityReleaseFetch(discogsReleaseId: string): Promise<void> {
+  const stale = await selectStaleReleaseIds([discogsReleaseId]);
+  if (stale.length === 0) {
+    return;
+  }
+
+  await enqueue({
+    type: TASK_FETCH_RELEASE,
+    payload: { discogsReleaseId },
+    dedupeKey: `release:${discogsReleaseId}`,
+    priority: PRIORITY_USER_REQUESTED,
+    // Ne repousse jamais une tentative déjà en cours de backoff : `enqueue()` prend le
+    // plus proche des deux `run_after`, celui-ci ne compte donc que s'il est plus tôt.
+    runAfter: new Date(),
+  });
 }
 
 /**

@@ -26,16 +26,23 @@ export function AlbumCover({
   className?: string;
 }) {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const imageRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
     const image = imageRef.current;
 
-    // L'image est rendue par le serveur : si elle échoue avant l'hydratation, l'événement
-    // `error` est perdu car aucun gestionnaire React n'est encore attaché. On rattrape ce
-    // cas après hydratation — `complete` avec une largeur nulle signifie « échouée ».
-    if (image?.complete && image.naturalWidth === 0) {
-      setFailed(true);
+    // L'image est rendue par le serveur : si elle a fini de charger (ou a échoué) avant
+    // l'hydratation, les événements `load`/`error` sont perdus — aucun gestionnaire React
+    // n'est encore attaché. On rattrape les deux cas après hydratation : `complete` avec
+    // une largeur nulle signifie « échouée », non nulle signifie « déjà chargée » (image
+    // en cache, cas fréquent pour une pochette déjà vue).
+    if (image?.complete) {
+      if (image.naturalWidth === 0) {
+        setFailed(true);
+      } else {
+        setLoaded(true);
+      }
     }
   }, []);
 
@@ -51,15 +58,28 @@ export function AlbumCover({
      `next/image` ne peut pas atteindre l'origine, protégée contre le hotlinking
      (SPEC-GAPS G-03). */
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      ref={imageRef}
-      src={src}
-      alt={t('collection.cover.alt', { title, artists })}
-      loading={eager ? 'eager' : 'lazy'}
-      decoding="async"
-      onError={() => setFailed(true)}
-      className={className ?? 'h-full w-full object-cover'}
-    />
+    <>
+      {/* Réservé au chargement : le conteneur parent est déjà `relative` (grille, fiche
+          album, lecteur), cet écran d'attente peut donc se superposer sans rien casser.
+          Disparaît dès le premier chargement — pas de scintillement sur les vues
+          suivantes, où l'image arrive déjà en cache. */}
+      {loaded ? null : (
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 animate-pulse bg-border motion-reduce:animate-none"
+        />
+      )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        ref={imageRef}
+        src={src}
+        alt={t('collection.cover.alt', { title, artists })}
+        loading={eager ? 'eager' : 'lazy'}
+        decoding="async"
+        onLoad={() => setLoaded(true)}
+        onError={() => setFailed(true)}
+        className={`${className ?? 'h-full w-full object-cover'} transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+      />
+    </>
   );
 }

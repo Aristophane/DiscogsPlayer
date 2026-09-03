@@ -178,7 +178,7 @@ export function RandomDrawer({
 
         {release ? (
           <article className="flex flex-col gap-4 sm:flex-row sm:items-start">
-            <div className="aspect-square w-full max-w-56 shrink-0 overflow-hidden rounded-lg bg-surface">
+            <div className="relative aspect-square w-full max-w-56 shrink-0 overflow-hidden rounded-lg bg-surface">
               <AlbumCover
                 src={coverProxyUrl(release.coverUrl)}
                 title={release.title}

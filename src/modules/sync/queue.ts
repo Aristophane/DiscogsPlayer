@@ -23,29 +23,53 @@ export type TaskRow = {
 export type EnqueueOptions = {
   type: string;
   payload: unknown;
-  /** Une seule tâche vivante par clé (§12.2) : la seconde est ignorée, pas dupliquée. */
+  /** Une seule tâche vivante par clé (§12.2) : la seconde met à jour, pas ne duplique. */
   dedupeKey?: string;
   runAfter?: Date;
   maxAttempts?: number;
+  /** Plus haut passe en premier dans `claim()` (§9.4, Lot 6bis). `0` par défaut. */
+  priority?: number;
 };
 
 /**
- * Ajoute une tâche. Retourne `null` si une tâche équivalente est déjà en attente ou en
- * cours : la déduplication est portée par un index unique partiel, donc fiable même
- * lorsque deux imports concurrents demandent la même édition.
+ * Ajoute une tâche, ou met à jour celle déjà vivante portant la même clé de
+ * déduplication (§12.2).
+ *
+ * Écrit en SQL brut : la cible de conflit est l'index unique **partiel**
+ * `tasks_dedupe_key_active_idx` (une tâche par clé, parmi celles encore vivantes), que le
+ * constructeur de requêtes Drizzle ne sait pas exprimer pour `onConflictDoUpdate`. Le
+ * conflit ne peut porter que sur `dedupe_key` — `id` est généré côté base — donc une
+ * tâche sans clé de déduplication s'insère toujours simplement.
+ *
+ * Sur conflit, la priorité ne redescend jamais (`greatest`) : un clic utilisateur peut
+ * faire remonter une tâche déjà programmée par l'import en arrière-plan devant la file,
+ * jamais l'inverse. `run_after` prend le plus proche des deux pour la même raison — une
+ * demande explicite ne doit pas rester derrière un backoff déjà entamé par un échec
+ * précédent.
  */
 export async function enqueue(options: EnqueueOptions): Promise<string | null> {
-  const rows = await db
-    .insert(tasks)
-    .values({
-      type: options.type,
-      payload: options.payload,
-      ...(options.dedupeKey === undefined ? {} : { dedupeKey: options.dedupeKey }),
-      ...(options.runAfter === undefined ? {} : { runAfter: options.runAfter }),
-      ...(options.maxAttempts === undefined ? {} : { maxAttempts: options.maxAttempts }),
-    })
-    .onConflictDoNothing()
-    .returning({ id: tasks.id });
+  const priority = options.priority ?? 0;
+  const runAfter = options.runAfter ?? new Date();
+  const maxAttempts = options.maxAttempts ?? 5;
+  const dedupeKey = options.dedupeKey ?? null;
+
+  const rows = await db.execute<{ id: string }>(sql`
+    insert into ${tasks} (type, payload, dedupe_key, run_after, max_attempts, priority)
+    values (
+      ${options.type},
+      ${JSON.stringify(options.payload)}::jsonb,
+      ${dedupeKey},
+      ${runAfter.toISOString()}::timestamptz,
+      ${maxAttempts},
+      ${priority}
+    )
+    on conflict (dedupe_key) where status in ('queued', 'running', 'retry_wait')
+    do update set
+      priority = greatest(${tasks}.priority, excluded.priority),
+      run_after = least(${tasks}.run_after, excluded.run_after),
+      updated_at = now()
+    returning id
+  `);
 
   return rows[0]?.id ?? null;
 }
@@ -93,7 +117,7 @@ export async function claim(
       where ${tasks.status} in ('queued', 'retry_wait')
         and ${tasks.runAfter} <= ${clock}
         ${typeFilter}
-      order by ${tasks.runAfter}
+      order by ${tasks.priority} desc, ${tasks.runAfter}
       limit ${limit}
       for update skip locked
     )
