@@ -249,3 +249,47 @@ describe('gestion des sessions', () => {
     expect(history.every((row) => row.resolved)).toBe(true);
   });
 });
+
+describe('relance et historique récent (demande produit)', () => {
+  it('évite de rouvrir sur le titre qui a démarré la session précédente', async () => {
+    // Une seule piste appariée par vidéo (groupe « déjà résolue ») : sans exclusion de
+    // l'historique récent, le tri `(exists resolution) desc, random()` la choisirait
+    // systématiquement en premier — `random()` n'a aucun effet sur un groupe à un seul
+    // élément. C'est exactement le défaut signalé.
+    await seedRelease({ n: 1, userId: aliceId, genre: 'Rock', trackCount: 1, withVideo: true });
+    for (let n = 2; n <= 6; n += 1) {
+      await seedRelease({ n, userId: aliceId, genre: 'Rock', trackCount: 1, withVideo: false });
+    }
+    const api = new FakeYoutubeApi();
+    api.results = [{ videoId: 'abc12345678', title: 'x', channelTitle: null }];
+
+    const first = await createSession(aliceId, {});
+    const firstDraw = await draw(aliceId, first.id, api);
+    expect(firstDraw.status).toBe('track');
+
+    // Relancer la radio ferme la session active et en ouvre une nouvelle, vide : rien
+    // dans *cette* session n'exclut plus la piste tirée juste avant.
+    const second = await createSession(aliceId, {});
+    const secondDraw = await draw(aliceId, second.id, api);
+    expect(secondDraw.status).toBe('track');
+
+    if (firstDraw.status === 'track' && secondDraw.status === 'track') {
+      expect(secondDraw.trackId).not.toBe(firstDraw.trackId);
+    }
+  });
+
+  it('rejoue quand même l’historique récent si le périmètre filtré ne laisse rien d’autre', async () => {
+    // « Dans la mesure du possible » (demande produit) : une seule piste éligible au
+    // total ne doit jamais se solder par un épuisement à tort.
+    await seedRelease({ n: 1, userId: aliceId, genre: 'Rock', trackCount: 1, withVideo: true });
+    const api = new FakeYoutubeApi();
+
+    const first = await createSession(aliceId, {});
+    await draw(aliceId, first.id, api);
+
+    const second = await createSession(aliceId, {});
+    const result = await draw(aliceId, second.id, api);
+
+    expect(result.status).toBe('track');
+  });
+});

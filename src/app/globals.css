@@ -49,6 +49,28 @@ body {
     sans-serif;
 }
 
+/*
+ * Iframe YouTube dans son cadre 16:9 (`.youtube-player-container`, player-bar.tsx).
+ *
+ * `new YT.Player(...)` crée un `<iframe>` en dehors de React (voir iframe-loader.ts) —
+ * impossible de lui poser une classe Tailwind par JSX. Sans cette règle, l'iframe garde
+ * ses dimensions par défaut (640×360 en dur) au lieu de respecter le cadre imposé par
+ * `aspect-video` : elle déborde de son conteneur sans s'y adapter, ce qui se voit à
+ * l'écran comme une vidéo rognée plutôt que mise à l'échelle. `position: absolute` +
+ * `inset: 0` l'oblige à occuper exactement le cadre, quelles que soient ses propres
+ * dimensions déclarées.
+ */
+.youtube-player-container {
+  position: relative;
+  overflow: hidden;
+}
+.youtube-player-container iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
 /* §20.2 : réduction des animations à la demande de l'utilisateur. */
 @media (prefers-reduced-motion: reduce) {
   *,

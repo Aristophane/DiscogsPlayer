@@ -91,6 +91,22 @@ test('entrer en Radio lance la lecture sans étape intermédiaire (ADR-0006)', a
   await expect(page.getByText('Piste Radio')).toBeVisible({ timeout: 10_000 });
 });
 
+test('le bouton « piste suivante » déclenche un vrai tirage en Radio', async ({ page }) => {
+  await signIn(page);
+  await page.goto('/radio');
+  await page.getByRole('button', { name: 'Lancer la radio' }).click();
+  await expect(page.getByText('Piste Radio')).toBeVisible({ timeout: 10_000 });
+
+  await page.getByRole('button', { name: 'Piste suivante' }).click();
+
+  // Une seule piste dans cette collection de test : le tirage suivant épuise la radio —
+  // la preuve que le bouton a bien déclenché un tirage (pas seulement avancé dans un
+  // album), la Radio ayant son propre vocabulaire de fin (`radio_ended`).
+  await expect(page.getByText('Vous avez écouté toute la sélection.')).toBeVisible({
+    timeout: 10_000,
+  });
+});
+
 test('une radio épuisée propose de recommencer', async ({ page }) => {
   await signIn(page);
   await page.goto('/radio');

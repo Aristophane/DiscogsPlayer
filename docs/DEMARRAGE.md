@@ -365,6 +365,41 @@ explicitement SPECIFICATION.md §13.1/§14.2/§17.5.
 Aucun test dédié n'existait pour cette route ou pour `pasteUrl` : rien à réécrire de ce
 côté. `npm run verify` complet repassé après coup.
 
+## Radio non répétitive, bouton suivant, vidéo rognée, 2026-09-03
+
+Trois demandes du porteur du produit sur la même session de travail.
+
+**Radio non répétitive au redémarrage.** Relancer la radio rouvrait quasi
+systématiquement sur le même titre : le tri de `claimNextCandidate`
+(`(exists track_resolutions) desc, random()`) place les pistes déjà résolues devant —
+souvent une seule au début, donc un groupe de taille 1 sur lequel `random()` n'a aucun
+effet. `recentlyPlayedTrackIds` (nouveau, `src/modules/radio/service.ts`) écarte désormais les dernières pistes jouées par
+l'utilisateur, toutes sessions confondues, sauf si ça ne laisse plus rien d'éligible
+(repli automatique, « dans la mesure du possible » — jamais d'épuisement à tort sur un
+périmètre filtré restreint). Deux tests d'intégration : l'un prouve la non-répétition
+sur un périmètre large, l'autre le repli quand une seule piste existe.
+
+**Bouton « piste suivante ».** `advanceQueue` (`playback-context.tsx`), jusqu'ici
+déclenché seulement par la fin automatique d'une vidéo YouTube, accepte maintenant
+aussi les états `playing_spotify` et `unresolved` en point de départ — un Spotify
+Embed n'a pas d'événement de fin exploitable, un repli manuel encore moins, mais
+l'utilisateur doit pouvoir passer outre dans les deux cas. Exposé via `skip()`, un
+bouton ⏭ dans la barre du lecteur, visible dans ces trois états. Fonctionne à la fois
+pour un album (piste suivante) et pour la Radio (nouveau tirage), `advanceQueue`
+distinguant déjà les deux via `activeRadioSessionRef`.
+
+**Vidéo rognée en mode déplié.** `new YT.Player(...)` crée l'iframe avec ses
+dimensions par défaut (640×360, en dur, hors du contrôle de Tailwind puisque React ne
+la rend jamais) : elle débordait de son cadre 16:9 au lieu de s'y adapter — vérifié en
+inspectant les rectangles réels (iframe 640×360 dans un conteneur mesuré à 358×216).
+Corrigé par une règle CSS ciblée (`.youtube-player-container`, `globals.css`) :
+`position: absolute; inset: 0; width/height: 100%` sur l'iframe, la seule façon de la
+contraindre puisqu'on ne peut pas lui poser de classe par JSX. Vérifié en e2e par
+comparaison directe des rectangles réels de l'iframe et de son conteneur (tolérance
+1 px), pas seulement par capture d'écran.
+
+203 tests unitaires et d'intégration, 66 tests e2e (mobile/tablette/desktop).
+
 ## Ordonnancement conseillé ensuite
 
 L'ordre des lots de §24 est bon, avec deux ajustements issus de l'analyse :

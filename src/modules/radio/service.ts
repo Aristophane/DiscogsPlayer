@@ -128,12 +128,23 @@ export async function createSession(
  * en priorité parmi celles déjà résolues (`exists (select 1 from track_resolutions)`).
  * L'insertion sert de verrou : deux tirages concurrents ne peuvent pas choisir la même
  * piste, la contrainte unique `(session_id, track_id)` tranchant en base.
+ *
+ * `excludeTrackIds` écarte en plus un historique récent (toutes sessions confondues,
+ * pas seulement celle-ci) : sans lui, relancer la radio choisissait quasi
+ * systématiquement la même piste, celle priorisée par « déjà résolue » — souvent une
+ * seule piste dans ce groupe au début, donc un tri par `random()` sans effet dessus.
  */
 async function claimNextCandidate(
   sessionId: string,
   userId: string,
   filters: RadioFilters,
+  excludeTrackIds: string[],
 ): Promise<string | null> {
+  const recentExclusion =
+    excludeTrackIds.length > 0
+      ? sql`and not (t.id = any(${sql.param(excludeTrackIds)}::uuid[]))`
+      : sql``;
+
   const rows = await db.execute<{ track_id: string }>(sql`
     with candidate as (
       select t.id
@@ -144,6 +155,7 @@ async function claimNextCandidate(
           select 1 from radio_session_tracks rst
           where rst.session_id = ${sessionId}::uuid and rst.track_id = t.id
         )
+        ${recentExclusion}
       order by
         (exists (select 1 from track_resolutions tr where tr.track_id = t.id)) desc,
         random()
@@ -167,6 +179,46 @@ async function claimNextCandidate(
   `);
 
   return rows[0]?.track_id ?? null;
+}
+
+/**
+ * Nombre de pistes récentes (toutes sessions de l'utilisateur confondues) à écarter des
+ * tirages suivants — c'est ce qui empêche une relance de rouvrir systématiquement sur le
+ * même titre.
+ */
+const RECENT_HISTORY_WINDOW = 5;
+
+/** Dernières pistes jouées par cet utilisateur en Radio, toutes sessions confondues. */
+async function recentlyPlayedTrackIds(userId: string, limit: number): Promise<string[]> {
+  const rows = await db.execute<{ track_id: string }>(sql`
+    select rst.track_id
+    from radio_session_tracks rst
+    join radio_sessions rs on rs.id = rst.session_id
+    where rs.user_id = ${userId}::uuid
+    order by rst.played_at desc
+    limit ${limit}
+  `);
+
+  return rows.map((row) => row.track_id);
+}
+
+/**
+ * Réclame le prochain candidat en évitant l'historique récent — sauf si ça ne laisse
+ * plus rien : « dans la mesure du possible » (demande produit), jamais au prix d'un
+ * épuisement à tort d'une radio filtrée sur un petit périmètre.
+ */
+async function claimNextCandidateAvoidingHistory(
+  sessionId: string,
+  userId: string,
+  filters: RadioFilters,
+  recentlyPlayed: string[],
+): Promise<string | null> {
+  const withHistoryExcluded = await claimNextCandidate(sessionId, userId, filters, recentlyPlayed);
+  if (withHistoryExcluded || recentlyPlayed.length === 0) {
+    return withHistoryExcluded;
+  }
+
+  return claimNextCandidate(sessionId, userId, filters, []);
 }
 
 async function markResolved(sessionId: string, trackId: string): Promise<void> {
@@ -194,9 +246,17 @@ export async function draw(
   }
 
   const filters = { genres: session.filterGenres, styles: session.filterStyles };
+  // Calculé une fois pour tout l'appel : les tentatives suivantes de ce même tirage
+  // doivent éviter le même historique récent, pas seulement la première.
+  const recentlyPlayed = await recentlyPlayedTrackIds(userId, RECENT_HISTORY_WINDOW);
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS_PER_DRAW; attempt += 1) {
-    const trackId = await claimNextCandidate(sessionId, userId, filters);
+    const trackId = await claimNextCandidateAvoidingHistory(
+      sessionId,
+      userId,
+      filters,
+      recentlyPlayed,
+    );
 
     if (!trackId) {
       // Plus aucune piste éligible non jouée : la radio est terminée.

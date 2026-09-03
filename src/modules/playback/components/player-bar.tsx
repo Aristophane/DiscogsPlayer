@@ -29,9 +29,15 @@ import { usePlayback } from '../playback-context';
  * jamais en retirant le conteneur YouTube du DOM ni en le masquant par `display: none`,
  * ce qui coupe la lecture dans la plupart des navigateurs. Le son continue pendant que
  * la vidéo est repliée, exactement le but recherché.
+ *
+ * Le cadre 16:9 de la vidéo dépliée (`.youtube-player-container`, globals.css) force
+ * l'iframe créée par l'API YouTube à occuper exactement ce cadre : sans cette règle,
+ * l'iframe garde ses dimensions par défaut (640×360 en dur, hors du contrôle de
+ * Tailwind puisque React ne la rend jamais) et déborde de son conteneur au lieu de s'y
+ * adapter — défaut réel observé, visible à l'écran comme une vidéo rognée.
  */
 export function PlayerBar() {
-  const { state, close, setYoutubeContainer } = usePlayback();
+  const { state, skip, close, setYoutubeContainer } = usePlayback();
   const [expanded, setExpanded] = useState(true);
   const barRef = useRef<HTMLDivElement>(null);
   // Vrai seulement à la transition idle → actif : un repli choisi par l'utilisateur reste
@@ -42,6 +48,12 @@ export function PlayerBar() {
   const visible = state.status !== 'idle';
   const track = state.status === 'idle' || state.status === 'radio_ended' ? null : state.track;
   const cover = track ? coverProxyUrl(track.coverUrl) : null;
+  // Même condition que `advanceQueue` côté contexte (playback-context.tsx) : passer ne
+  // veut rien dire pendant une résolution en cours ou une erreur de réseau.
+  const canSkip =
+    state.status === 'playing_youtube' ||
+    state.status === 'playing_spotify' ||
+    state.status === 'unresolved';
 
   useEffect(() => {
     if (visible && !wasVisibleRef.current) {
@@ -94,6 +106,17 @@ export function PlayerBar() {
               <p className="truncate text-xs text-muted">{track.artists}</p>
             </div>
 
+            {canSkip ? (
+              <button
+                type="button"
+                onClick={skip}
+                aria-label={t('player.skip')}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-sm"
+              >
+                <span aria-hidden="true">⏭</span>
+              </button>
+            ) : null}
+
             <button
               type="button"
               onClick={() => setExpanded((value) => !value)}
@@ -144,7 +167,9 @@ export function PlayerBar() {
             <div
               ref={setYoutubeContainer}
               className={
-                state.status === 'playing_youtube' ? 'aspect-video w-full max-w-sm' : 'hidden'
+                state.status === 'playing_youtube'
+                  ? 'youtube-player-container aspect-video w-full max-w-sm'
+                  : 'hidden'
               }
             />
 

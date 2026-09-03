@@ -170,6 +170,44 @@ test('le bouton play d’un album résout depuis la vidéo Discogs, sans écran 
   await expect(page.getByText('Résolution en cours…')).toHaveCount(0, { timeout: 5_000 });
 });
 
+test('la vidéo dépliée remplit son cadre sans déborder (Lot 6bis)', async ({ page }) => {
+  await signIn(page);
+  await page.goto(`/sorties/${releaseWithVideoId}`);
+  await page.getByRole('button', { name: 'Lire l’album' }).click();
+
+  const container = page.locator('.youtube-player-container');
+  const video = page.locator('iframe[src*="youtube.com"]');
+  await expect(video).toBeVisible({ timeout: 10_000 });
+
+  const containerBox = await container.boundingBox();
+  const videoBox = await video.boundingBox();
+  expect(containerBox).not.toBeNull();
+  expect(videoBox).not.toBeNull();
+
+  // L'API YouTube crée l'iframe avec des dimensions par défaut (640×360 en dur) : sans
+  // la règle CSS dédiée (globals.css), elle déborde de son cadre 16:9 au lieu de s'y
+  // adapter — défaut réel observé, visible à l'écran comme une vidéo rognée. Tolérance
+  // d'un pixel pour l'arrondi sous-pixel.
+  expect(Math.abs(videoBox!.width - containerBox!.width)).toBeLessThanOrEqual(1);
+  expect(Math.abs(videoBox!.height - containerBox!.height)).toBeLessThanOrEqual(1);
+});
+
+test('le bouton « piste suivante » avance dans l’album', async ({ page }) => {
+  await signIn(page);
+  await page.goto(`/sorties/${releaseWithVideoId}`);
+  await page.getByRole('button', { name: 'Lire l’album' }).click();
+  await expect(page.getByText('Première Piste')).toBeVisible({ timeout: 10_000 });
+
+  await page.getByRole('button', { name: 'Piste suivante' }).click();
+
+  // La seconde piste de cette édition n'a pas de correspondance connue (fixture) : le
+  // repli manuel apparaît, preuve que le bouton a bien avancé plutôt que de rejouer la
+  // même piste.
+  await expect(page.getByText('Cette piste n’a pas de correspondance connue.')).toBeVisible({
+    timeout: 10_000,
+  });
+});
+
 test('le lecteur se replie sans interrompre la vidéo (Lot 6bis)', async ({ page }) => {
   await signIn(page);
   await page.goto(`/sorties/${releaseWithVideoId}`);

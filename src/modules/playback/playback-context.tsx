@@ -62,6 +62,8 @@ type PlaybackContextValue = {
   playAlbum: (discogsReleaseId: string) => Promise<void>;
   /** Démarre ou reprend une session Radio : chaque fin de piste enchaîne un tirage. */
   playFromRadio: (radioSessionId: string) => Promise<void>;
+  /** Passe à la suite : piste suivante de l'album, ou tirage suivant en Radio. */
+  skip: () => void;
   close: () => void;
   /**
    * Ref callback à poser sur le conteneur stable du lecteur (`PlayerBar`). Le nœud que
@@ -269,9 +271,20 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     [mountYoutubePlayer, stopYoutubePlayer],
   );
 
+  /**
+   * Enchaîne sur la suite : appelé automatiquement à la fin d'une vidéo YouTube
+   * (`onStateChange`, via `advanceQueueRef`), et aussi par le bouton « piste suivante »
+   * (`skip`, ci-dessous) — d'où un état de départ plus large que le seul YouTube : une
+   * piste Spotify n'a pas d'événement de fin exploitable, un repli manuel n'en a aucun,
+   * mais l'utilisateur doit pouvoir passer outre dans les deux cas.
+   */
   const advanceQueue = useCallback(async () => {
     const current = stateRef.current;
-    if (current.status !== 'playing_youtube') {
+    if (
+      current.status !== 'playing_youtube' &&
+      current.status !== 'playing_spotify' &&
+      current.status !== 'unresolved'
+    ) {
       return;
     }
 
@@ -440,9 +453,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     updateState({ status: 'idle' });
   }, [stopYoutubePlayer]);
 
+  /** Bouton « piste suivante » : appelle la même logique que la fin automatique. */
+  const skip = useCallback(() => {
+    void advanceQueue();
+  }, [advanceQueue]);
+
   return (
     <PlaybackContext.Provider
-      value={{ state, playTrack, playAlbum, playFromRadio, close, setYoutubeContainer }}
+      value={{ state, playTrack, playAlbum, playFromRadio, skip, close, setYoutubeContainer }}
     >
       {children}
     </PlaybackContext.Provider>
