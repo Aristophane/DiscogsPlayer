@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { t } from '@/lib/i18n';
 import { getCurrentUser } from '@/modules/auth/current-user';
 import { SpotifyPreferenceToggle } from '@/modules/auth/components/spotify-preference';
@@ -20,12 +22,12 @@ export default async function HomePage() {
         <h1 className="text-3xl font-semibold tracking-tight">{t('app.name')}</h1>
         <p className="text-lg text-muted">{t('app.tagline')}</p>
         <p className="text-sm text-muted">{t('home.intro')}</p>
-        <a
+        <Link
           href="/connexion"
           className="self-start rounded-md bg-foreground px-5 py-3 font-medium text-background"
         >
           {t('home.signIn')}
-        </a>
+        </Link>
       </main>
     );
   }
@@ -65,13 +67,20 @@ export default async function HomePage() {
         />
       </nav>
 
-      <a href="/parametres" className="text-sm underline">
+      <Link href="/parametres" className="text-sm underline">
         {t('nav.settings')}
-      </a>
+      </Link>
     </main>
   );
 }
 
+/**
+ * `next/link`, jamais un `<a>` brut (§SPEC-GAPS G-17) : une ancre classique déclenche une
+ * navigation plein document, qui démonte tout le layout racine — le lecteur persistant y
+ * compris — avant de tout remonter à vide. Défaut réel constaté en cliquant sur la tuile
+ * Radio pendant une lecture en cours : le lecteur disparaissait purement et simplement au
+ * lieu de continuer en arrière-plan (2026-09-03).
+ */
 function HubTile({
   href,
   icon,
@@ -109,11 +118,11 @@ function HubTile({
   }
 
   return (
-    <a
+    <Link
       href={href}
       className={`${shape} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current`}
     >
       {content}
-    </a>
+    </Link>
   );
 }

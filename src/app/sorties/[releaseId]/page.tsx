@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 
 import { t } from '@/lib/i18n';
@@ -53,9 +54,9 @@ export default async function ReleasePage({ params }: { params: Promise<{ releas
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 py-8 sm:px-6">
-      <a href="/collection" className="text-sm underline">
+      <Link href="/collection" className="text-sm underline">
         {t('release.backToCollection')}
-      </a>
+      </Link>
 
       {user.activeCollectionOwner ? (
         <ViewingAsBanner ownerUsername={user.activeCollectionOwner.username} />

@@ -537,6 +537,51 @@ compris `previewInvite`, et `resolveActiveCollection`), 81 tests e2e (75 + un no
 scénario de bout en bout — invitation, bascule visible, retour, révocation à effet
 immédiat — mobile/tablette/desktop).
 
+## Lecteur démonté par les liens internes, couverture vidéo, 2026-09-03
+
+Deux demandes produit distinctes (`docs/RAF.md`), reçues ensemble.
+
+**« Quand on clique sur Radio, le lecteur ne dois jamais disparaître au changement
+d'écran. »** Défaut réel, pas une impression : la tuile Radio de l'accueil (et plusieurs
+autres liens internes — retour à la collection depuis Aléatoire/Radio/la fiche album,
+lien « Voir la collection » de l'import, « Ouvrir » d'un tirage Aléatoire, « Relancer la
+radio » du lecteur lui-même) étaient de simples `<a href>` plutôt que `next/link`. Une
+ancre classique déclenche une navigation plein document : le layout racine — donc
+`PlaybackProvider`, monté dedans pour rester persistant (§SPEC-GAPS G-17) — est démonté
+puis remonté à vide, ce qui réinitialise le lecteur à `idle` au lieu de le laisser
+continuer. Le lien le plus visible en pratique était la tuile Radio de l'accueil : une
+des « trois portes d'entrée » d'ADR-0006, donc le premier endroit où quelqu'un déjà en
+train d'écouter irait cliquer.
+
+Tous remplacés par `next/link`, qui ne déclenche qu'une navigation côté client — les
+seuls `<a>` restants (recherche YouTube/Spotify externe, Embed Spotify, démarrage OAuth
+`/api/auth/discogs/start`, lien de connexion d'une invitation `begin`) le sont
+délibérément, vers une vraie destination hors SPA ou une route qui doit rester en dehors
+du préchargement de `Link`.
+
+Piège rencontré en écrivant le test de non-régression : `page.goto('/')` est lui-même
+une vraie navigation plein document côté Playwright, donc invalide pour vérifier qu'_une
+navigation côté client_ préserve le lecteur — il fallait rejoindre l'accueil par un clic
+sur un lien déjà affiché (« Discogs Player » de l'en-tête), pas par `goto`.
+
+**« Afficher le % de la collection couverte par les vidéos disponibles directement (dans
+la section paramètre). »** Nouvelle fonction `getVideoCoverage` (module `collection`) :
+part des pistes de la collection déjà présentes dans `track_resolutions` — Discogs vidéo
+ou recherche passée, peu importe la source — sur le total des pistes connues (headings
+et pistes d'index exclus). Toujours `user.id`, jamais `activeCollectionOwnerId` : comme
+le reste des paramètres, c'est toujours son propre compte, jamais celui d'un ami
+consulté (Lot 7). Point important vérifié explicitement en test : une vidéo Discogs déjà
+appariée à l'import ne compte pas tant que la piste n'a pas été réellement résolue
+(`resolveTrack`) — la résolution reste strictement à la demande (§4.2), jamais
+déclenchée pour calculer ce chiffre. Une édition dont les détails n'ont pas encore été
+récupérés (import en arrière-plan en cours) n'a encore aucune ligne `discogs_tracks` :
+elle est donc absente du calcul plutôt que de le fausser, ce qui sous-estime honnêtement
+la couverture pendant un import plutôt que de la surestimer.
+
+228 tests unitaires et d'intégration (223 + 5, `getVideoCoverage`), 87 tests e2e (81 + 2
+— persistance du lecteur à travers une navigation, couverture vidéo affichée dans les
+paramètres — mobile/tablette/desktop).
+
 ## Ordonnancement conseillé ensuite
 
 L'ordre des lots de §24 est bon, avec deux ajustements issus de l'analyse :

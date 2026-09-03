@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { t } from '@/lib/i18n';
@@ -29,8 +30,8 @@ export default async function CollectionPage() {
         <nav className="flex gap-4 text-sm underline">
           {/* L'import et sa progression concernent son propre compte : sans objet en
               consultant la collection d'un ami (§18.5, décision produit du Lot 7). */}
-          {user.activeCollectionOwner ? null : <a href="/import">{t('collection.import')}</a>}
-          <a href="/parametres">{t('nav.settings')}</a>
+          {user.activeCollectionOwner ? null : <Link href="/import">{t('collection.import')}</Link>}
+          <Link href="/parametres">{t('nav.settings')}</Link>
         </nav>
       </header>
 
@@ -42,12 +43,12 @@ export default async function CollectionPage() {
         <div className="flex flex-col items-start gap-3 py-16">
           <p className="text-lg">{t('collection.empty')}</p>
           {user.activeCollectionOwner ? null : (
-            <a
+            <Link
               href="/import"
               className="rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background"
             >
               {t('import.action.start')}
-            </a>
+            </Link>
           )}
         </div>
       ) : (

@@ -196,6 +196,13 @@ export const fr = {
   'settings.spotify.status.unset': 'Vous n’avez pas encore répondu.',
   'settings.spotify.change': 'Modifier',
 
+  // Couverture vidéo de la collection (demande produit 2026-09-03)
+  'settings.coverage.title': 'Couverture vidéo',
+  'settings.coverage.explanation':
+    'Part de votre collection déjà associée à une vidéo connue — sans lancer aucune recherche.',
+  'settings.coverage.value': '{percent} % ({covered} sur {total} pistes)',
+  'settings.coverage.empty': 'Votre collection ne contient encore aucune piste connue.',
+
   'error.generic': 'Une erreur est survenue. Réessayez dans un instant.',
   'error.notFound': 'Cette page n’existe pas.',
 

@@ -214,6 +214,42 @@ test('le bouton play d’un album résout depuis la vidéo Discogs, sans écran 
   await expect(page.getByText('Résolution en cours…')).toHaveCount(0, { timeout: 5_000 });
 });
 
+test('le lecteur survit à une navigation vers Radio depuis l’accueil (SPEC-GAPS G-17)', async ({
+  page,
+}) => {
+  // Défaut réel constaté le 2026-09-03 : la tuile Radio de l'accueil (et plusieurs
+  // autres liens internes) étaient de simples `<a>`, qui déclenchent une navigation
+  // plein document — celle-ci démonte tout le layout racine, lecteur persistant y
+  // compris, au lieu d'une navigation côté client qui le laisse en place.
+  await signIn(page);
+  await page.goto(`/sorties/${releaseWithVideoId}`);
+  await page.getByRole('button', { name: 'Lire l’album' }).click();
+
+  const player = page.getByRole('region', { name: 'Lecture en cours' });
+  await expect(player).toBeVisible();
+  // Le titre de piste n'apparaît dans le lecteur que si la résolution le fournit ; ce
+  // qui identifie la lecture en cours de façon fiable, ici comme après la navigation,
+  // c'est le titre de l'édition, toujours renseigné.
+  await expect(player.getByText('Album Avec Vidéo')).toBeVisible();
+
+  // `page.goto` déclenche lui-même une vraie navigation plein document — pas ce qu'on
+  // veut vérifier ici. On rejoint l'accueil par un clic sur un lien déjà à l'écran,
+  // pour rester dans une navigation côté client de bout en bout.
+  await page.getByRole('link', { name: 'Discogs Player' }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(player).toBeVisible();
+
+  // La tuile de l'accueil, pas le lien « Radio » de l'en-tête (même libellé, deux
+  // liens) : c'est elle qui causait le défaut, scopée via `<main>` pour la distinguer.
+  await page.locator('main').getByRole('link', { name: /Radio/ }).click();
+
+  await expect(page).toHaveURL(/\/radio$/);
+  // Toujours visible, avec la même piste : une navigation plein document aurait tout
+  // réinitialisé (le lecteur redémarre à `idle`, sans rien en cours).
+  await expect(player).toBeVisible();
+  await expect(player.getByText('Album Avec Vidéo')).toBeVisible();
+});
+
 test('sur petit mobile, les boutons du lecteur passent sous le titre plutôt que de l’écraser', async ({
   page,
 }) => {

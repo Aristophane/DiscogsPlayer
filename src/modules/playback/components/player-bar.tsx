@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 
 import { t } from '@/lib/i18n';
@@ -269,9 +270,9 @@ export function PlayerBar() {
                 : t('player.radio.unavailable')}
             </p>
             <div className="flex shrink-0 gap-3">
-              <a href="/radio" className="text-sm underline">
+              <Link href="/radio" className="text-sm underline">
                 {t('player.radio.restart')}
-              </a>
+              </Link>
               <button
                 type="button"
                 onClick={close}

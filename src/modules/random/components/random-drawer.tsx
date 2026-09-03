@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState } from 'react';
 
 import { t } from '@/lib/i18n';
@@ -195,12 +196,12 @@ export function RandomDrawer({
                 <p className="text-sm text-muted">{release.genres.join(', ')}</p>
               ) : null}
 
-              <a
+              <Link
                 href={`/sorties/${release.discogsReleaseId}`}
                 className="mt-2 self-start rounded-md border border-border px-4 py-2 text-sm"
               >
                 {t('random.open')}
-              </a>
+              </Link>
             </div>
           </article>
         ) : null}

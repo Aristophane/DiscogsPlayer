@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 
 import { t, type MessageKey } from '@/lib/i18n';
@@ -103,9 +104,9 @@ export function ImportProgress({ initialRun }: { initialRun: Run | null }) {
         >
           {run?.status === 'failed' ? t('import.action.retry') : t('import.action.start')}
         </button>
-        <a href="/collection" className="rounded-md border border-border px-4 py-2 text-sm">
+        <Link href="/collection" className="rounded-md border border-border px-4 py-2 text-sm">
           {t('import.action.browse')}
-        </a>
+        </Link>
       </div>
 
       {isActive ? <p className="text-sm text-muted">{t('import.explanation')}</p> : null}

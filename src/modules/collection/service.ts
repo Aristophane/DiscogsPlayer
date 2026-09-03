@@ -251,3 +251,41 @@ export async function listFacets(userId: string): Promise<{ genres: Facet[]; sty
     styles: await query(sql`${discogsReleases.styles}`),
   };
 }
+
+export type VideoCoverage = { totalTracks: number; coveredTracks: number; percent: number };
+
+/**
+ * Part de la collection déjà couverte par une vidéo connue — demande produit, affichée
+ * dans les paramètres (2026-09-03). « Couverte » veut dire : une résolution existe déjà
+ * dans `track_resolutions`, qu'elle vienne d'une vidéo Discogs appariée à l'import ou
+ * d'une recherche passée — jamais une recherche déclenchée pour calculer ce chiffre
+ * (§4.2, aucune résolution sans demande explicite de lecture). Une piste d'une édition
+ * dont les détails n'ont pas encore été récupérés (import en arrière-plan toujours en
+ * cours) compte dans le dénominateur dès qu'elle existe en base, pas avant — ce qui sous-
+ * estime honnêtement la couverture pendant un import, plutôt que de la surestimer en
+ * ignorant ce qui n'est pas encore connu.
+ */
+export async function getVideoCoverage(userId: string): Promise<VideoCoverage> {
+  const rows = await db.execute<{ total: string; covered: string }>(sql`
+    select
+      count(*)::text as total,
+      count(tr.id)::text as covered
+    from discogs_tracks t
+    inner join discogs_releases r on r.id = t.release_id
+    left join track_resolutions tr on tr.track_id = t.id
+    where t.type = 'track'
+      and exists (
+        select 1
+        from collection_instances ci
+        where ci.release_id = r.id
+          and ci.user_id = ${userId}::uuid
+          and ci.is_active = true
+      )
+  `);
+
+  const totalTracks = Number(rows[0]?.total ?? 0);
+  const coveredTracks = Number(rows[0]?.covered ?? 0);
+  const percent = totalTracks === 0 ? 0 : Math.round((coveredTracks / totalTracks) * 100);
+
+  return { totalTracks, coveredTracks, percent };
+}
