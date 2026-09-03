@@ -43,7 +43,8 @@ import { usePlayback } from '../playback-context';
  * doublon sans rien piloter côté Spotify.
  */
 export function PlayerBar() {
-  const { state, skip, muted, toggleMute, close, setYoutubeContainer } = usePlayback();
+  const { state, skip, muted, toggleMute, playing, togglePlayPause, close, setYoutubeContainer } =
+    usePlayback();
   const [expanded, setExpanded] = useState(true);
   const barRef = useRef<HTMLDivElement>(null);
   // Vrai seulement à la transition idle → actif : un repli choisi par l'utilisateur reste
@@ -103,9 +104,11 @@ export function PlayerBar() {
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-3 sm:px-6">
         {track ? (
           // Deux lignes sur petit mobile, une seule à partir de `sm:` : à quatre boutons
-          // (son, suivant, replier, fermer), les caser sur la même ligne que la pochette
-          // et le titre ne laissait presque plus de place au titre sous ~360 px — mesuré
-          // à 46 px de large restants, en pratique un titre tronqué à 3-4 caractères.
+          // (son, suivant, replier, fermer — un cinquième, lecture/pause, s'y est ajouté
+          // depuis sans casser la mesure ci-dessous, revérifiée en e2e), les caser sur la
+          // même ligne que la pochette et le titre ne laissait presque plus de place au
+          // titre sous ~360 px — mesuré à 46 px de large restants, en pratique un titre
+          // tronqué à 3-4 caractères.
           // `sm:contents` fait disparaître ce second conteneur de la mise en page dès
           // `sm:` : ses enfants (les boutons) rejoignent alors directement la ligne du
           // dessus, reproduisant la mise en page à une seule ligne d'origine.
@@ -122,6 +125,18 @@ export function PlayerBar() {
             </div>
 
             <div className="flex shrink-0 items-center justify-end gap-2 sm:contents">
+              {state.status === 'playing_youtube' ? (
+                <button
+                  type="button"
+                  onClick={togglePlayPause}
+                  aria-pressed={playing}
+                  aria-label={playing ? t('player.pause') : t('player.resume')}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-sm"
+                >
+                  <span aria-hidden="true">{playing ? '⏸' : '▶'}</span>
+                </button>
+              ) : null}
+
               {state.status === 'playing_youtube' ? (
                 <button
                   type="button"

@@ -162,6 +162,8 @@ export const fr = {
   'player.skip': 'Piste suivante',
   'player.mute': 'Couper le son',
   'player.unmute': 'Rétablir le son',
+  'player.pause': 'Mettre en pause',
+  'player.resume': 'Reprendre la lecture',
   'player.expand': 'Déplier le lecteur',
   'player.collapse': 'Replier le lecteur',
   'player.openSpotify': 'Ouvrir dans Spotify',

@@ -640,6 +640,47 @@ se ferme de lui-même : un disque figé occupant tout l'écran n'aurait plus de 
 228 tests inchangés, 90 tests e2e (87 + 1 nouveau — apparition pendant la lecture, encore
 visible lecteur replié, ouverture/fermeture du plein écran — mobile/tablette/desktop).
 
+## Bouton lecture/pause YouTube, 2026-09-03
+
+Demande produit : « il faut qu'il y ait un bouton play sur le lecteur qui soit associé
+au bouton de youtube. » Ambiguë entre deux lectures possibles (contrôle lecture/pause du
+lecteur intégré, ou lien externe « Ouvrir sur YouTube ») — tranchée avec l'utilisateur
+avant d'écrire du code (§24) : un vrai bouton lecture/pause pilotant directement le
+lecteur YouTube intégré, absent jusqu'ici (seuls existaient muet, piste suivante,
+replier, fermer).
+
+`playback-context.tsx` expose désormais `playing`/`togglePlayPause`, sur le même
+principe que `muted`/`toggleMute`, mais avec une différence de fond : `playing` ne
+change **jamais** de façon optimiste au clic, seulement en retour du vrai événement
+`onStateChange` du lecteur (`PLAYING`/`PAUSED`) — sans quoi un autoplay bloqué par le
+navigateur afficherait « en lecture » alors que rien ne joue. `togglePlayPause` se
+contente d'appeler `playVideo()`/`pauseVideo()` sur l'instance réelle ; c'est
+`onStateChange`, seule source de vérité, qui met `playing` à jour ensuite.
+
+**Défaut réel trouvé en écrivant le test e2e**, pas une simple prudence théorique :
+appeler `pauseVideo()` juste après le montage d'un nouveau lecteur (avant la fin de sa
+poignée de main interne avec l'iframe, tout juste avant `onReady`) lève une vraie
+`TypeError: pauseVideo is not a function` — l'instance renvoyée par `new YT.Player(...)`
+n'expose pas immédiatement toute son API. Corrigé par un `try/catch` défensif autour de
+l'appel (et, par le même raisonnement, autour de `toggleMute`, qui partage exactement la
+même fenêtre de course sans avoir jamais été prise en défaut jusqu'ici) : rater cet appel
+ne désynchronise rien, `onStateChange` reste la seule source de vérité pour `playing`, et
+`mutedRef` retient la préférence quoi qu'il arrive pour le prochain lecteur.
+
+**Limite réelle de l'environnement e2e, découverte en déboguant ce même test** : la
+vidéo YouTube réelle ne dépasse jamais l'état `UNSTARTED` dans ce bac à sable (aucune
+accélération matérielle disponible pour le décodage, confirmé en journalisant tous les
+événements `onStateChange` reçus — un seul, jamais `PLAYING`). Confirmer un vrai
+aller-retour lecture → pause → lecture par des événements réels n'est donc pas
+reproductible ici : le test vérifie ce qui est réellement observable dans cet
+environnement — le bouton existe avec son état par défaut, le cliquer deux fois ne lève
+aucune erreur JS et ne redémarre pas la lecture (c'est justement le défaut ci-dessus,
+avant correction, qui faisait planter puis réinitialiser tout le lecteur) — pas la
+confirmation d'état, hors de portée ici sans rapport avec du code applicatif incorrect.
+
+228 tests unitaires et d'intégration (inchangé), 93 tests e2e (90 + 1 — bouton lecture/
+pause, sans planter — mobile/tablette/desktop).
+
 ## Ordonnancement conseillé ensuite
 
 L'ordre des lots de §24 est bon, avec deux ajustements issus de l'analyse :

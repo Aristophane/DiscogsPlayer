@@ -67,6 +67,15 @@ type PlaybackContextValue = {
   /** Coupure du son du lecteur YouTube — sans effet sur l'Embed Spotify (§ commentaire). */
   muted: boolean;
   toggleMute: () => void;
+  /**
+   * Lecture/pause du lecteur YouTube — même périmètre que `muted` : l'Embed Spotify
+   * porte ses propres contrôles, volume et lecture compris, dans son interface intégrée.
+   * Reflète l'état réel du lecteur (`onStateChange`), jamais une supposition optimiste
+   * au-delà du chargement initial — sans quoi un autoplay bloqué par le navigateur
+   * afficherait « en lecture » alors que rien ne joue.
+   */
+  playing: boolean;
+  togglePlayPause: () => void;
   close: () => void;
   /**
    * Ref callback à poser sur le conteneur stable du lecteur (`PlayerBar`). Le nœud que
@@ -148,6 +157,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // l'API), un state jumeau pour que l'interface se redessine au bouton.
   const mutedRef = useRef(false);
   const [muted, setMutedState] = useState(false);
+  // Reflète l'état réel du lecteur YouTube (`onStateChange`), pas une supposition : posé
+  // à `true` en même temps qu'une nouvelle vidéo est demandée (l'intention est toujours
+  // de lire), puis corrigé par le premier événement réel — y compris si l'autoplay est
+  // bloqué par le navigateur, ce que seul l'événement peut révéler.
+  const [playing, setPlaying] = useState(true);
 
   function updateState(next: PlaybackState): void {
     stateRef.current = next;
@@ -164,6 +178,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // Capturé de façon synchrone, avant tout `await` : lu dans le même tick que l'appel,
     // donc forcément la valeur en vigueur au moment de CETTE résolution.
     const token = requestTokenRef.current;
+    // Optimiste : corrigé sous peu par le vrai `onStateChange`, mais évite d'afficher
+    // « en pause » entre la demande et le premier événement du lecteur.
+    setPlaying(true);
 
     void loadYoutubeIframeApi().then(() => {
       // Chargement du script YouTube pas instantané au premier appel (vrai réseau) : une
@@ -214,8 +231,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             event.target.playVideo();
           },
           onStateChange: (event) => {
-            if (window.YT && event.data === window.YT.PlayerState.ENDED) {
+            if (!window.YT) {
+              return;
+            }
+            if (event.data === window.YT.PlayerState.ENDED) {
               advanceQueueRef.current();
+              return;
+            }
+            if (event.data === window.YT.PlayerState.PLAYING) {
+              setPlaying(true);
+            } else if (event.data === window.YT.PlayerState.PAUSED) {
+              setPlaying(false);
             }
           },
         },
@@ -464,6 +490,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     currentTrackIdRef.current = null;
     activeRadioSessionRef.current = null;
     requestTokenRef.current += 1;
+    setPlaying(true);
     updateState({ status: 'idle' });
   }, [stopYoutubePlayer]);
 
@@ -482,12 +509,41 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     mutedRef.current = next;
     setMutedState(next);
 
-    if (next) {
-      playerRef.current?.mute();
-    } else {
-      playerRef.current?.unMute();
+    try {
+      if (next) {
+        playerRef.current?.mute();
+      } else {
+        playerRef.current?.unMute();
+      }
+    } catch {
+      // Même fenêtre de course qu'un clic précoce sur lecture/pause (voir
+      // `togglePlayPause`) : l'instance du lecteur peut ne pas encore exposer toute son
+      // API juste après son montage. La préférence reste correctement retenue dans
+      // `mutedRef` quoi qu'il arrive — un nouveau lecteur (piste suivante) la reprendra.
     }
   }, []);
+
+  /**
+   * Lecture/pause de la vidéo YouTube en cours. Ne fait qu'appeler le lecteur réel :
+   * `playing` n'est mis à jour qu'en retour, par `onStateChange` — jamais ici — pour
+   * qu'il ne raconte jamais un état que le lecteur n'a pas réellement atteint.
+   */
+  const togglePlayPause = useCallback(() => {
+    try {
+      if (playing) {
+        playerRef.current?.pauseVideo();
+      } else {
+        playerRef.current?.playVideo();
+      }
+    } catch {
+      // L'instance renvoyée par `new YT.Player(...)` n'expose pas immédiatement toute
+      // son API : un clic assez tôt après le montage (avant que le lecteur ait fini sa
+      // poignée de main interne, juste avant `onReady`) peut lever une vraie
+      // `TypeError: pauseVideo is not a function` — défaut réel observé en e2e, pas une
+      // supposition. `onStateChange` reste la seule source de vérité pour `playing` ;
+      // rater cet appel ne désynchronise donc rien, l'utilisateur n'a qu'à recliquer.
+    }
+  }, [playing]);
 
   return (
     <PlaybackContext.Provider
@@ -499,6 +555,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         skip,
         muted,
         toggleMute,
+        playing,
+        togglePlayPause,
         close,
         setYoutubeContainer,
       }}
