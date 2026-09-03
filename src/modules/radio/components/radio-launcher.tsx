@@ -52,22 +52,8 @@ export function RadioLauncher({ facets }: { facets: { genres: Facet[]; styles: F
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-medium">{t('radio.filters.title')}</h2>
-        <FacetGroup
-          legend={t('collection.filters.genres')}
-          facets={facets.genres}
-          selected={genres}
-          onToggle={(value) => toggle(genres, setGenres, value)}
-        />
-        <FacetGroup
-          legend={t('collection.filters.styles')}
-          facets={facets.styles}
-          selected={styles}
-          onToggle={(value) => toggle(styles, setStyles, value)}
-        />
-      </section>
-
+      {/* Au-dessus des filtres (demande produit 2026-09-03) : lancer la radio est
+          l'action principale de cet écran, les filtres n'en sont qu'un réglage. */}
       <button
         type="button"
         onClick={start}
@@ -84,6 +70,22 @@ export function RadioLauncher({ facets }: { facets: { genres: Facet[]; styles: F
       ) : null}
 
       {isPlaying ? <p className="text-sm text-muted">{t('radio.playing')}</p> : null}
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-lg font-medium">{t('radio.filters.title')}</h2>
+        <FacetGroup
+          legend={t('collection.filters.genres')}
+          facets={facets.genres}
+          selected={genres}
+          onToggle={(value) => toggle(genres, setGenres, value)}
+        />
+        <FacetGroup
+          legend={t('collection.filters.styles')}
+          facets={facets.styles}
+          selected={styles}
+          onToggle={(value) => toggle(styles, setStyles, value)}
+        />
+      </section>
     </div>
   );
 }

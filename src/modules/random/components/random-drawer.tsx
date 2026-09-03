@@ -115,28 +115,8 @@ export function RandomDrawer({
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-medium">{t('random.filters.title')}</h2>
-        <FacetGroup
-          legend={t('collection.filters.genres')}
-          facets={facets.genres}
-          selected={genres}
-          onToggle={(value) => toggle(genres, setGenres, value)}
-        />
-        <FacetGroup
-          legend={t('collection.filters.styles')}
-          facets={facets.styles}
-          selected={styles}
-          onToggle={(value) => toggle(styles, setStyles, value)}
-        />
-        <p className="text-sm text-muted">
-          {filtered ? null : `${t('random.filters.none')} — `}
-          {session
-            ? t('random.progress', { drawn: session.drawnCount, total: session.eligibleCount })
-            : t('random.eligible', { count: initialEligible })}
-        </p>
-      </section>
-
+      {/* Au-dessus des filtres (demande produit 2026-09-03) : tirer est l'action
+          principale de cet écran, les filtres n'en sont qu'un réglage. */}
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -164,6 +144,28 @@ export function RandomDrawer({
           {t('random.error')}
         </p>
       ) : null}
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-lg font-medium">{t('random.filters.title')}</h2>
+        <FacetGroup
+          legend={t('collection.filters.genres')}
+          facets={facets.genres}
+          selected={genres}
+          onToggle={(value) => toggle(genres, setGenres, value)}
+        />
+        <FacetGroup
+          legend={t('collection.filters.styles')}
+          facets={facets.styles}
+          selected={styles}
+          onToggle={(value) => toggle(styles, setStyles, value)}
+        />
+        <p className="text-sm text-muted">
+          {filtered ? null : `${t('random.filters.none')} — `}
+          {session
+            ? t('random.progress', { drawn: session.drawnCount, total: session.eligibleCount })
+            : t('random.eligible', { count: initialEligible })}
+        </p>
+      </section>
 
       <div aria-live="polite" className="flex flex-col gap-3">
         {exhausted ? (
