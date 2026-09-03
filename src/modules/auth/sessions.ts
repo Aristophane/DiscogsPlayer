@@ -34,6 +34,14 @@ export type SessionUser = {
   locale: string;
   /** ADR-0006 : préférence de recherche Spotify, jamais un OAuth. */
   spotifyEnabled: 'unset' | 'yes' | 'no';
+  /**
+   * Collection actuellement consultée (Lot 7, partage), brute et **non vérifiée** — la
+   * valeur stockée sur la session, telle quelle. Ce n'est pas `current-user.ts` qui la
+   * lit directement : il revérifie toujours contre `collection_shares` avant de s'en
+   * servir (§18.5), pour qu'une révocation prenne effet dès la requête suivante, pas
+   * seulement à la reconnexion. `null` = pas de bascule enregistrée, sa propre collection.
+   */
+  viewingAsUserId: string | null;
 };
 
 export type CreatedSession = {
@@ -72,6 +80,7 @@ export async function resolveSession(token: string, now = new Date()): Promise<S
       expiresAt: sessions.expiresAt,
       lastSeenAt: sessions.lastSeenAt,
       revokedAt: sessions.revokedAt,
+      viewingAsUserId: sessions.viewingAsUserId,
       user: {
         id: users.id,
         discogsUserId: users.discogsUserId,
@@ -118,7 +127,24 @@ export async function resolveSession(token: string, now = new Date()): Promise<S
     contributionStatus: row.user.contributionStatus,
     locale: row.user.locale,
     spotifyEnabled: row.user.spotifyEnabled,
+    viewingAsUserId: row.viewingAsUserId,
   };
+}
+
+/**
+ * Fixe (ou efface, avec `null`) la collection consultée par cette session. Aucune
+ * vérification de partage ici à dessein : c'est l'appelant (`current-user.ts` via la
+ * route de bascule) qui doit avoir déjà confirmé un partage actif — cette fonction ne
+ * fait qu'écrire, comme `revokeSession` ne fait que révoquer.
+ */
+export async function setViewingAsUserIdByToken(
+  token: string,
+  targetUserId: string | null,
+): Promise<void> {
+  await db
+    .update(sessions)
+    .set({ viewingAsUserId: targetUserId })
+    .where(eq(sessions.tokenHash, hashToken(token)));
 }
 
 export async function revokeSession(token: string, now = new Date()): Promise<void> {

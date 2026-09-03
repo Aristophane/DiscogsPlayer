@@ -29,6 +29,10 @@ export const radioSessions = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    /** Collection tirée (Lot 7, partage) — même raison qu'en Aléatoire (random.ts), figée à la création. */
+    collectionOwnerId: uuid('collection_owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     filterGenres: text('filter_genres')
       .array()
       .notNull()

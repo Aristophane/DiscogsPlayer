@@ -2,6 +2,7 @@ import { t } from '@/lib/i18n';
 import { getCurrentUser } from '@/modules/auth/current-user';
 import { SpotifyPreferenceToggle } from '@/modules/auth/components/spotify-preference';
 import { countCollection } from '@/modules/collection/service';
+import { ViewingAsBanner } from '@/modules/sharing/components/viewing-as-banner';
 
 /**
  * Accueil (§7.1 `/`).
@@ -29,7 +30,7 @@ export default async function HomePage() {
     );
   }
 
-  const count = await countCollection(user.id);
+  const count = await countCollection(user.activeCollectionOwnerId);
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-8 px-4 py-12 sm:px-6">
@@ -38,6 +39,10 @@ export default async function HomePage() {
       {/* Onboarding facultatif (ADR-0006) : disparaît dès qu'une réponse est donnée,
           rejouable ensuite depuis les paramètres. */}
       <SpotifyPreferenceToggle initial={user.spotifyEnabled} variant="onboarding" />
+
+      {user.activeCollectionOwner ? (
+        <ViewingAsBanner ownerUsername={user.activeCollectionOwner.username} />
+      ) : null}
 
       <nav className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <HubTile

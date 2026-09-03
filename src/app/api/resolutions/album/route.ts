@@ -40,9 +40,13 @@ export async function POST(request: Request): Promise<NextResponse> {
       });
     }
 
-    // Qualifié par utilisateur : on ne lance la lecture que d'un album de sa collection
-    // (§18.5), pas de n'importe quelle édition du catalogue partagé.
-    const release = await getReleaseForUser(user.id, parsed.data.discogsReleaseId);
+    // Qualifié par la collection active (§18.5) : la sienne par défaut, ou celle d'un
+    // ami dont le partage a été revérifié (Lot 7) — jamais n'importe quelle édition du
+    // catalogue partagé au-delà de ces deux cas.
+    const release = await getReleaseForUser(
+      user.activeCollectionOwnerId,
+      parsed.data.discogsReleaseId,
+    );
     if (!release) {
       throw new ApiError({
         code: 'RELEASE_NOT_FOUND',
@@ -75,6 +79,9 @@ export async function POST(request: Request): Promise<NextResponse> {
       );
     }
 
+    // `user.id`, pas `activeCollectionOwnerId` : `resolveTrack` ne s'en sert que pour
+    // la préférence Spotify (ADR-0006), qui doit rester celle de la personne qui
+    // regarde l'écran, pas celle du propriétaire d'une collection consultée (Lot 7).
     const playback = await resolveTrack(user.id, trackId);
 
     return NextResponse.json(

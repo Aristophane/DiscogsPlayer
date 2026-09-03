@@ -83,6 +83,18 @@ export const sessions = pgTable(
     /** Sert l'expiration glissante : inactivité prolongée = session morte. */
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    /**
+     * Collection actuellement consultée (Lot 7, partage) : `null` = la sienne, sinon un
+     * ami dont le partage a été vérifié au moment de la bascule. Stockée pour éviter de
+     * la redemander à chaque requête, mais jamais prise pour argent comptant : chaque
+     * lecture la revérifie contre `collection_shares` (`current-user.ts`) — une
+     * révocation doit prendre effet immédiatement, pas seulement à la reconnexion. Perdre
+     * cette valeur (compte de l'ami supprimé) doit simplement ramener à sa propre
+     * collection, jamais faire échouer la session : `set null`, pas `cascade`.
+     */
+    viewingAsUserId: uuid('viewing_as_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

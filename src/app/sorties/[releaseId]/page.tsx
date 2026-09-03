@@ -11,6 +11,7 @@ import { TracklistPending } from '@/modules/catalog/components/tracklist-pending
 import { AlbumCover } from '@/modules/collection/components/album-cover';
 import { coverProxyUrl } from '@/modules/collection/cover';
 import { PlayButton } from '@/modules/playback/components/play-button';
+import { ViewingAsBanner } from '@/modules/sharing/components/viewing-as-banner';
 import { requestPriorityReleaseFetch } from '@/modules/sync/service';
 
 /**
@@ -30,7 +31,7 @@ export default async function ReleasePage({ params }: { params: Promise<{ releas
   }
 
   const { releaseId } = await params;
-  const release = await getReleaseForUser(user.id, releaseId);
+  const release = await getReleaseForUser(user.activeCollectionOwnerId, releaseId);
 
   if (!release) {
     notFound();
@@ -55,6 +56,10 @@ export default async function ReleasePage({ params }: { params: Promise<{ releas
       <a href="/collection" className="text-sm underline">
         {t('release.backToCollection')}
       </a>
+
+      {user.activeCollectionOwner ? (
+        <ViewingAsBanner ownerUsername={user.activeCollectionOwner.username} />
+      ) : null}
 
       <header className="flex flex-col gap-6 sm:flex-row sm:items-start">
         <div className="relative aspect-square w-full max-w-xs shrink-0 overflow-hidden rounded-lg bg-surface">

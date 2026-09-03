@@ -198,4 +198,41 @@ export const fr = {
 
   'error.generic': 'Une erreur est survenue. Réessayez dans un instant.',
   'error.notFound': 'Cette page n’existe pas.',
+
+  // Partage de collection (Lot 7, demande produit 2026-09-03)
+  'sharing.invite.title': 'Inviter un ami',
+  'sharing.invite.explanation':
+    'Générez un lien à usage unique : la personne qui l’ouvre pourra parcourir et écouter votre collection, avec son propre compte Discogs.',
+  'sharing.invite.generate': 'Générer un lien d’invitation',
+  'sharing.invite.generating': 'Génération…',
+  'sharing.invite.copy': 'Copier le lien',
+  'sharing.invite.copied': 'Lien copié.',
+  'sharing.invite.failed': 'Impossible de générer le lien. Réessayez.',
+  'sharing.invite.expiresAt': 'Ce lien expire le {date}.',
+  'sharing.given.title': 'Collections que vous partagez',
+  'sharing.given.empty': 'Vous ne partagez votre collection avec personne pour le moment.',
+  'sharing.given.revoke': 'Retirer l’accès',
+  'sharing.given.revoking': 'Retrait…',
+  'sharing.received.title': 'Collections partagées avec vous',
+  'sharing.received.empty': 'Personne ne partage encore sa collection avec vous.',
+  'sharing.received.switch': 'Consulter cette collection',
+  'sharing.received.switching': 'Bascule…',
+  'sharing.received.current': 'Consultée actuellement',
+  'sharing.error': 'Une erreur est survenue. Réessayez.',
+
+  'collection.viewingAs': 'Vous consultez la collection de {username}.',
+  'collection.viewingAs.back': 'Revenir à ma collection',
+  'collection.viewingAs.switching': 'Retour…',
+
+  'invitation.title': '{username} vous invite',
+  'invitation.explanation':
+    'Vous pourrez parcourir et écouter la collection de {username}, avec votre propre compte Discogs.',
+  'invitation.accept': 'Accepter l’invitation',
+  'invitation.accepting': 'Acceptation…',
+  'invitation.acceptFailed': 'Cette invitation n’a pas pu être acceptée. Réessayez.',
+  'invitation.signIn': 'Se connecter avec Discogs pour accepter',
+  'invitation.invalid.title': 'Invitation introuvable',
+  'invitation.invalid.explanation': 'Ce lien d’invitation est invalide, déjà utilisé, ou a expiré.',
+  'invitation.invalid.backHome': 'Retour à l’accueil',
+  'invitation.alreadySignedInAs': 'Vous êtes connecté en tant que {username}.',
 } as const;

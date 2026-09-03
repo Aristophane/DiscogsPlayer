@@ -4,6 +4,7 @@ import { t } from '@/lib/i18n';
 import { getCurrentUser } from '@/modules/auth/current-user';
 import { SignOutButton } from '@/modules/auth/components/sign-out-button';
 import { SpotifyPreferenceToggle } from '@/modules/auth/components/spotify-preference';
+import { SharingManager } from '@/modules/sharing/components/sharing-manager';
 
 /**
  * Paramètres (§7.1). Compte, déconnexion, préférence Spotify (ADR-0006).
@@ -30,6 +31,8 @@ export default async function ParametresPage() {
       </section>
 
       <SpotifyPreferenceToggle initial={user.spotifyEnabled} variant="settings" />
+
+      <SharingManager activeCollectionOwnerId={user.activeCollectionOwnerId} />
 
       <section className="flex flex-col gap-3">
         <p className="text-sm text-muted">{t('settings.signOut.explanation')}</p>

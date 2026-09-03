@@ -29,6 +29,8 @@ export type RadioFilters = { genres?: string[] | undefined; styles?: string[] | 
 
 export type RadioSessionView = {
   id: string;
+  /** Collection tirée (Lot 7, partage) — la sienne, ou celle d'un ami au moment d'ouvrir la session. */
+  collectionOwnerId: string;
   filterGenres: string[];
   filterStyles: string[];
   completedAt: Date | null;
@@ -39,7 +41,7 @@ export type RadioDrawResult =
   | { status: 'exhausted' }
   | { status: 'unavailable' };
 
-function eligibleTracksCondition(userId: string, filters: RadioFilters) {
+function eligibleTracksCondition(collectionOwnerId: string, filters: RadioFilters) {
   const genres = filters.genres ?? [];
   const styles = filters.styles ?? [];
 
@@ -53,7 +55,7 @@ function eligibleTracksCondition(userId: string, filters: RadioFilters) {
     and exists (
       select 1 from collection_instances ci
       where ci.release_id = t.release_id
-        and ci.user_id = ${userId}::uuid
+        and ci.user_id = ${collectionOwnerId}::uuid
         and ci.is_active = true
     )
     and r.id = t.release_id
@@ -66,6 +68,7 @@ export async function getActiveSession(userId: string): Promise<RadioSessionView
   const rows = await db
     .select({
       id: radioSessions.id,
+      collectionOwnerId: radioSessions.collectionOwnerId,
       filterGenres: radioSessions.filterGenres,
       filterStyles: radioSessions.filterStyles,
       completedAt: radioSessions.completedAt,
@@ -81,6 +84,7 @@ async function getSession(userId: string, sessionId: string): Promise<RadioSessi
   const rows = await db
     .select({
       id: radioSessions.id,
+      collectionOwnerId: radioSessions.collectionOwnerId,
       filterGenres: radioSessions.filterGenres,
       filterStyles: radioSessions.filterStyles,
       completedAt: radioSessions.completedAt,
@@ -92,9 +96,16 @@ async function getSession(userId: string, sessionId: string): Promise<RadioSessi
   return rows[0] ?? null;
 }
 
-/** Ouvre une session ; une session active existante est close (même règle que RAND). */
+/**
+ * Ouvre une session ; une session active existante est close (même règle que RAND).
+ *
+ * `collectionOwnerId` (Lot 7, partage) est figé ici : `draw()` le relit depuis la
+ * session plutôt que de le redemander, pour qu'une bascule de collection active en
+ * cours de route ne change jamais le bassin d'une radio déjà lancée.
+ */
 export async function createSession(
   userId: string,
+  collectionOwnerId: string,
   filters: RadioFilters,
   now = new Date(),
 ): Promise<RadioSessionView> {
@@ -109,15 +120,19 @@ export async function createSession(
 
     const [created] = await tx
       .insert(radioSessions)
-      .values({ userId, filterGenres: genres, filterStyles: styles })
+      .values({ userId, collectionOwnerId, filterGenres: genres, filterStyles: styles })
       .returning({
         id: radioSessions.id,
+        collectionOwnerId: radioSessions.collectionOwnerId,
         filterGenres: radioSessions.filterGenres,
         filterStyles: radioSessions.filterStyles,
         completedAt: radioSessions.completedAt,
       });
 
-    log.info({ userId, sessionId: created!.id, genres, styles }, 'radio ouverte');
+    log.info(
+      { userId, collectionOwnerId, sessionId: created!.id, genres, styles },
+      'radio ouverte',
+    );
 
     return created!;
   });
@@ -136,7 +151,7 @@ export async function createSession(
  */
 async function claimNextCandidate(
   sessionId: string,
-  userId: string,
+  collectionOwnerId: string,
   filters: RadioFilters,
   excludeTrackIds: string[],
 ): Promise<string | null> {
@@ -150,7 +165,7 @@ async function claimNextCandidate(
       select t.id
       from discogs_tracks t
       join discogs_releases r on r.id = t.release_id
-      where ${eligibleTracksCondition(userId, filters)}
+      where ${eligibleTracksCondition(collectionOwnerId, filters)}
         and not exists (
           select 1 from radio_session_tracks rst
           where rst.session_id = ${sessionId}::uuid and rst.track_id = t.id
@@ -209,16 +224,21 @@ async function recentlyPlayedTrackIds(userId: string, limit: number): Promise<st
  */
 async function claimNextCandidateAvoidingHistory(
   sessionId: string,
-  userId: string,
+  collectionOwnerId: string,
   filters: RadioFilters,
   recentlyPlayed: string[],
 ): Promise<string | null> {
-  const withHistoryExcluded = await claimNextCandidate(sessionId, userId, filters, recentlyPlayed);
+  const withHistoryExcluded = await claimNextCandidate(
+    sessionId,
+    collectionOwnerId,
+    filters,
+    recentlyPlayed,
+  );
   if (withHistoryExcluded || recentlyPlayed.length === 0) {
     return withHistoryExcluded;
   }
 
-  return claimNextCandidate(sessionId, userId, filters, []);
+  return claimNextCandidate(sessionId, collectionOwnerId, filters, []);
 }
 
 async function markResolved(sessionId: string, trackId: string): Promise<void> {
@@ -253,7 +273,7 @@ export async function draw(
   for (let attempt = 0; attempt < MAX_ATTEMPTS_PER_DRAW; attempt += 1) {
     const trackId = await claimNextCandidateAvoidingHistory(
       sessionId,
-      userId,
+      session.collectionOwnerId,
       filters,
       recentlyPlayed,
     );

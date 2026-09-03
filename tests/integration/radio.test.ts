@@ -104,7 +104,7 @@ afterAll(async () => {
 describe('priorité aux pistes déjà résolues (ADR-0006 point 3)', () => {
   it('tire une piste appariée à une vidéo Discogs sans appeler YouTube', async () => {
     await seedRelease({ n: 1, userId: aliceId, genre: 'Rock', trackCount: 1, withVideo: true });
-    const session = await createSession(aliceId, {});
+    const session = await createSession(aliceId, aliceId, {});
     const api = new FakeYoutubeApi();
 
     const result = await draw(aliceId, session.id, api);
@@ -118,7 +118,7 @@ describe('priorité aux pistes déjà résolues (ADR-0006 point 3)', () => {
 
   it('passe par la recherche seulement pour les éditions sans vidéo', async () => {
     await seedRelease({ n: 1, userId: aliceId, genre: 'Rock', trackCount: 1, withVideo: false });
-    const session = await createSession(aliceId, {});
+    const session = await createSession(aliceId, aliceId, {});
     const api = new FakeYoutubeApi();
     api.results = [{ videoId: 'abc12345678', title: 'Artiste 1 - Piste 1-1', channelTitle: null }];
 
@@ -134,7 +134,7 @@ describe('absence de répétition dans une session', () => {
     for (let n = 1; n <= 3; n += 1) {
       await seedRelease({ n, userId: aliceId, genre: 'Rock', trackCount: 2, withVideo: true });
     }
-    const session = await createSession(aliceId, {});
+    const session = await createSession(aliceId, aliceId, {});
     const api = new FakeYoutubeApi();
 
     const drawn: string[] = [];
@@ -151,7 +151,7 @@ describe('absence de répétition dans une session', () => {
 
   it('se termine et propose de recommencer une fois toutes les pistes vues', async () => {
     await seedRelease({ n: 1, userId: aliceId, genre: 'Rock', trackCount: 1, withVideo: true });
-    const session = await createSession(aliceId, {});
+    const session = await createSession(aliceId, aliceId, {});
     const api = new FakeYoutubeApi();
 
     await draw(aliceId, session.id, api);
@@ -166,7 +166,7 @@ describe('absence de répétition dans une session', () => {
     // l'échec de la tentative 0 et la disparition du bassin à la tentative 1 se produisent
     // tous deux dans ce même appel — pas la peine d'un second `draw()` pour le constater.
     await seedRelease({ n: 1, userId: aliceId, genre: 'Rock', trackCount: 1, withVideo: false });
-    const session = await createSession(aliceId, {});
+    const session = await createSession(aliceId, aliceId, {});
     const api = new FakeYoutubeApi();
     api.results = [];
 
@@ -180,7 +180,7 @@ describe('absence de répétition dans une session', () => {
     for (let n = 1; n <= 8; n += 1) {
       await seedRelease({ n, userId: aliceId, genre: 'Rock', trackCount: 1, withVideo: false });
     }
-    const session = await createSession(aliceId, {});
+    const session = await createSession(aliceId, aliceId, {});
     const api = new FakeYoutubeApi();
     api.results = [];
 
@@ -193,7 +193,7 @@ describe('filtres Genre et Style', () => {
     await seedRelease({ n: 1, userId: aliceId, genre: 'Rock', trackCount: 1, withVideo: true });
     await seedRelease({ n: 2, userId: aliceId, genre: 'Jazz', trackCount: 1, withVideo: true });
 
-    const session = await createSession(aliceId, { genres: ['Jazz'] });
+    const session = await createSession(aliceId, aliceId, { genres: ['Jazz'] });
     const api = new FakeYoutubeApi();
 
     const first = await draw(aliceId, session.id, api);
@@ -209,8 +209,8 @@ describe('gestion des sessions', () => {
   it('n’autorise qu’une seule radio active par utilisateur', async () => {
     await seedRelease({ n: 1, userId: aliceId, genre: 'Rock', trackCount: 1, withVideo: true });
 
-    const first = await createSession(aliceId, {});
-    const second = await createSession(aliceId, { genres: ['Jazz'] });
+    const first = await createSession(aliceId, aliceId, {});
+    const second = await createSession(aliceId, aliceId, { genres: ['Jazz'] });
 
     expect(second.id).not.toBe(first.id);
 
@@ -220,7 +220,7 @@ describe('gestion des sessions', () => {
 
   it('refuse de tirer dans la radio d’un autre utilisateur (§18.5)', async () => {
     await seedRelease({ n: 1, userId: aliceId, genre: 'Rock', trackCount: 1, withVideo: true });
-    const session = await createSession(aliceId, {});
+    const session = await createSession(aliceId, aliceId, {});
 
     const bob = await upsertUserFromDiscogs({ id: 998_000_002, username: 'bob_radio' }, TOKENS);
 
@@ -233,7 +233,7 @@ describe('gestion des sessions', () => {
     for (let n = 1; n <= 2; n += 1) {
       await seedRelease({ n, userId: aliceId, genre: 'Rock', trackCount: 1, withVideo: true });
     }
-    const session = await createSession(aliceId, {});
+    const session = await createSession(aliceId, aliceId, {});
     const api = new FakeYoutubeApi();
 
     await draw(aliceId, session.id, api);
@@ -263,13 +263,13 @@ describe('relance et historique récent (demande produit)', () => {
     const api = new FakeYoutubeApi();
     api.results = [{ videoId: 'abc12345678', title: 'x', channelTitle: null }];
 
-    const first = await createSession(aliceId, {});
+    const first = await createSession(aliceId, aliceId, {});
     const firstDraw = await draw(aliceId, first.id, api);
     expect(firstDraw.status).toBe('track');
 
     // Relancer la radio ferme la session active et en ouvre une nouvelle, vide : rien
     // dans *cette* session n'exclut plus la piste tirée juste avant.
-    const second = await createSession(aliceId, {});
+    const second = await createSession(aliceId, aliceId, {});
     const secondDraw = await draw(aliceId, second.id, api);
     expect(secondDraw.status).toBe('track');
 
@@ -284,10 +284,10 @@ describe('relance et historique récent (demande produit)', () => {
     await seedRelease({ n: 1, userId: aliceId, genre: 'Rock', trackCount: 1, withVideo: true });
     const api = new FakeYoutubeApi();
 
-    const first = await createSession(aliceId, {});
+    const first = await createSession(aliceId, aliceId, {});
     await draw(aliceId, first.id, api);
 
-    const second = await createSession(aliceId, {});
+    const second = await createSession(aliceId, aliceId, {});
     const result = await draw(aliceId, second.id, api);
 
     expect(result.status).toBe('track');

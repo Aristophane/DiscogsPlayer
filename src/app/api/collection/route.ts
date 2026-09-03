@@ -44,7 +44,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       });
     }
 
-    const result = await listCollection(user.id, {
+    const result = await listCollection(user.activeCollectionOwnerId, {
       ...parsed.data,
       sort: parseSort(url.searchParams.get('sort')),
     });

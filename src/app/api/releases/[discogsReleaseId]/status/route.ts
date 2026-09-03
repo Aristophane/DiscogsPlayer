@@ -22,7 +22,7 @@ export async function GET(
   const user = await requireUser();
   const { discogsReleaseId } = await context.params;
 
-  const release = await getReleaseForUser(user.id, discogsReleaseId);
+  const release = await getReleaseForUser(user.activeCollectionOwnerId, discogsReleaseId);
 
   return NextResponse.json(
     { tracksReady: release !== null && release.detailsFetchedAt !== null },

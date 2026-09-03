@@ -38,7 +38,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       });
     }
 
-    const session = await createSession(user.id, parsed.data);
+    const session = await createSession(user.id, user.activeCollectionOwnerId, parsed.data);
 
     return NextResponse.json(session, {
       status: 201,

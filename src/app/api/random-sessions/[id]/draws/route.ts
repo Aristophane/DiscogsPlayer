@@ -41,7 +41,7 @@ export async function POST(
       );
     }
 
-    const release = await getReleaseForUser(user.id, result.discogsReleaseId);
+    const release = await getReleaseForUser(user.activeCollectionOwnerId, result.discogsReleaseId);
 
     return NextResponse.json(
       { status: 'drawn', drawOrder: result.drawOrder, release },

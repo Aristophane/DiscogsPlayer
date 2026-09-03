@@ -12,7 +12,11 @@ import { ApiError } from '@/lib/api-error';
 import { requestId } from '@/lib/logger';
 import { hasTrustedOrigin } from '@/modules/auth/cookies';
 import { requireUser } from '@/modules/auth/current-user';
-import { getNextTrackId, getTrackForResolution } from '@/modules/catalog/release-service';
+import {
+  getNextTrackId,
+  getReleaseForUser,
+  getTrackForResolution,
+} from '@/modules/catalog/release-service';
 import { resolveTrack } from '@/modules/resolution/service';
 
 export const dynamic = 'force-dynamic';
@@ -58,6 +62,21 @@ export async function POST(request: Request): Promise<NextResponse> {
       );
     }
 
+    // Le catalogue est partagé entre tous les utilisateurs (§10.2) : un `releaseId`
+    // valide n'importe où ne suffit pas, il faut qu'il appartienne à la collection
+    // active (§18.5 ; Lot 7 pour une collection partagée). Défaut préexistant corrigé
+    // ici : cette route n'avait jusque-là aucune vérification, contrairement à
+    // `/api/resolutions/album`.
+    const release = await getReleaseForUser(user.activeCollectionOwnerId, track.discogsReleaseId);
+    if (!release) {
+      return NextResponse.json(
+        { status: 'end_of_album' },
+        { headers: { 'cache-control': 'no-store', 'x-request-id': id } },
+      );
+    }
+
+    // `user.id`, pas `activeCollectionOwnerId` : voir le commentaire équivalent dans
+    // `/api/resolutions/album`.
     const playback = await resolveTrack(user.id, nextTrackId);
 
     return NextResponse.json(

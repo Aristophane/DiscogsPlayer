@@ -143,7 +143,7 @@ describe('filtres Genre et Style (RAND-004, RAND-005)', () => {
 
 describe('absence de répétition (RAND-003, RAND-007)', () => {
   it('ne rend jamais deux fois le même album avant épuisement', async () => {
-    const session = await createSession(aliceId, {});
+    const session = await createSession(aliceId, aliceId, {});
     const drawn = await drawAll(aliceId, session.id);
 
     expect(drawn).toHaveLength(5);
@@ -151,7 +151,7 @@ describe('absence de répétition (RAND-003, RAND-007)', () => {
   });
 
   it('s’arrête à l’épuisement plutôt que de reboucler', async () => {
-    const session = await createSession(aliceId, {});
+    const session = await createSession(aliceId, aliceId, {});
     await drawAll(aliceId, session.id);
 
     expect(await draw(aliceId, session.id)).toEqual({ status: 'exhausted' });
@@ -163,10 +163,10 @@ describe('absence de répétition (RAND-003, RAND-007)', () => {
   });
 
   it('recommencer ouvre une session vierge', async () => {
-    const first = await createSession(aliceId, {});
+    const first = await createSession(aliceId, aliceId, {});
     await drawAll(aliceId, first.id);
 
-    const second = await createSession(aliceId, {});
+    const second = await createSession(aliceId, aliceId, {});
     expect(second.id).not.toBe(first.id);
 
     const drawn = await drawAll(aliceId, second.id);
@@ -174,14 +174,14 @@ describe('absence de répétition (RAND-003, RAND-007)', () => {
   });
 
   it('ne tire que dans le périmètre des filtres de la session', async () => {
-    const session = await createSession(aliceId, { genres: ['Electronic'] });
+    const session = await createSession(aliceId, aliceId, { genres: ['Electronic'] });
     const drawn = await drawAll(aliceId, session.id);
 
     expect(drawn.sort()).toEqual([R(3), R(4)].sort());
   });
 
   it('mémorise la progression entre deux appels', async () => {
-    const session = await createSession(aliceId, {});
+    const session = await createSession(aliceId, aliceId, {});
 
     await draw(aliceId, session.id);
     await draw(aliceId, session.id);
@@ -198,7 +198,7 @@ describe('absence de répétition (RAND-003, RAND-007)', () => {
 
 describe('absence de pondération par exemplaires (RAND-002)', () => {
   it('un album possédé en trois exemplaires ne sort qu’une fois par session', async () => {
-    const session = await createSession(aliceId, {});
+    const session = await createSession(aliceId, aliceId, {});
     const drawn = await drawAll(aliceId, session.id);
 
     expect(drawn.filter((id) => id === R(1))).toHaveLength(1);
@@ -210,7 +210,7 @@ describe('absence de pondération par exemplaires (RAND-002)', () => {
     const firstDraws: string[] = [];
 
     for (let round = 0; round < 60; round += 1) {
-      const session = await createSession(aliceId, {});
+      const session = await createSession(aliceId, aliceId, {});
       const result = await draw(aliceId, session.id);
       if (result.status === 'drawn') {
         firstDraws.push(result.discogsReleaseId);
@@ -229,8 +229,8 @@ describe('absence de pondération par exemplaires (RAND-002)', () => {
 
 describe('gestion des sessions', () => {
   it('n’autorise qu’une seule session active par utilisateur (G-08)', async () => {
-    const first = await createSession(aliceId, {});
-    const second = await createSession(aliceId, { genres: ['Rock'] });
+    const first = await createSession(aliceId, aliceId, {});
+    const second = await createSession(aliceId, aliceId, { genres: ['Rock'] });
 
     expect(second.id).not.toBe(first.id);
 
@@ -241,7 +241,7 @@ describe('gestion des sessions', () => {
   });
 
   it('refuse de tirer dans la session d’un autre utilisateur (§18.5)', async () => {
-    const session = await createSession(aliceId, {});
+    const session = await createSession(aliceId, aliceId, {});
 
     expect(await draw(bobId, session.id)).toEqual({ status: 'exhausted' });
     expect(await getSession(bobId, session.id)).toBeNull();
@@ -249,7 +249,7 @@ describe('gestion des sessions', () => {
   });
 
   it('une session sans album éligible s’épuise immédiatement', async () => {
-    const session = await createSession(aliceId, { genres: ['Genre Inexistant'] });
+    const session = await createSession(aliceId, aliceId, { genres: ['Genre Inexistant'] });
 
     expect(session.eligibleCount).toBe(0);
     expect(await draw(aliceId, session.id)).toEqual({ status: 'exhausted' });

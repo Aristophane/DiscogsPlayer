@@ -20,6 +20,17 @@ export const randomSessions = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    /**
+     * Collection tirée (Lot 7, partage) : la sienne par défaut, ou celle d'un ami
+     * consultée au moment d'ouvrir la session. Figée à la création, jamais redérivée
+     * pendant la session — sans quoi basculer sa collection active en cours de route
+     * changerait le bassin sous une session déjà ouverte, et RAND-003 (jamais deux fois
+     * le même disque) perdrait tout son sens : le « déjà vu » d'une collection ne veut
+     * rien dire pour une autre.
+     */
+    collectionOwnerId: uuid('collection_owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
     filterGenres: text('filter_genres')
       .array()
       .notNull()

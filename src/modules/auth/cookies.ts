@@ -31,6 +31,38 @@ export function clearSessionCookie(response: NextResponse): void {
   });
 }
 
+export const PENDING_INVITE_COOKIE_NAME = 'dp_pending_invite';
+
+/**
+ * Mémorise un lien d'invitation le temps du détour OAuth (Lot 7) : un visiteur non
+ * connecté qui ouvre `/invitations/[token]` doit d'abord se connecter avec Discogs ;
+ * ce cookie survit ce détour pour que le callback OAuth consomme l'invitation ensuite.
+ * Courte durée de vie et non `HttpOnly` : lu côté serveur uniquement (le callback), mais
+ * la lecture serveur n'exige pas `HttpOnly` — ce choix suit `Lax` comme le cookie de
+ * session, pour survivre à la redirection de retour de Discogs.
+ */
+export function setPendingInviteCookie(response: NextResponse, token: string): void {
+  const env = getEnv();
+
+  response.cookies.set(PENDING_INVITE_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 900, // 15 minutes : largement assez pour le détour OAuth.
+  });
+}
+
+export function clearPendingInviteCookie(response: NextResponse): void {
+  response.cookies.set(PENDING_INVITE_COOKIE_NAME, '', {
+    httpOnly: true,
+    secure: getEnv().NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 0,
+  });
+}
+
 /**
  * Défense CSRF des requêtes mutantes (§18.2) : l'origine doit être la nôtre.
  *

@@ -23,6 +23,8 @@ export type RandomFilters = {
 
 export type RandomSessionView = {
   id: string;
+  /** Collection tirée (Lot 7, partage) — la sienne, ou celle d'un ami au moment d'ouvrir la session. */
+  collectionOwnerId: string;
   filterGenres: string[];
   filterStyles: string[];
   eligibleCount: number;
@@ -35,12 +37,14 @@ export type DrawResult =
   | { status: 'exhausted' };
 
 /**
- * Condition d'éligibilité d'une édition pour un utilisateur.
+ * Condition d'éligibilité d'une édition pour une collection.
  *
  * `exists` et non `join` : c'est précisément ce qui empêche un exemplaire en double de
- * peser deux fois dans le tirage (RAND-002).
+ * peser deux fois dans le tirage (RAND-002). `collectionOwnerId` n'est pas forcément
+ * l'utilisateur qui tire (Lot 7, partage) : c'est la collection consultée au moment
+ * d'ouvrir la session, pas nécessairement la sienne.
  */
-function eligibleCondition(userId: string, filters: RandomFilters) {
+function eligibleCondition(collectionOwnerId: string, filters: RandomFilters) {
   const genres = filters.genres ?? [];
   const styles = filters.styles ?? [];
 
@@ -54,7 +58,7 @@ function eligibleCondition(userId: string, filters: RandomFilters) {
       select 1
       from collection_instances ci
       where ci.release_id = r.id
-        and ci.user_id = ${userId}::uuid
+        and ci.user_id = ${collectionOwnerId}::uuid
         and ci.is_active = true
     )
     ${genreCondition}
@@ -62,12 +66,15 @@ function eligibleCondition(userId: string, filters: RandomFilters) {
   `;
 }
 
-/** Nombre d'éditions uniques éligibles, tous filtres appliqués. */
-export async function countEligible(userId: string, filters: RandomFilters): Promise<number> {
+/** Nombre d'éditions uniques éligibles dans une collection, tous filtres appliqués. */
+export async function countEligible(
+  collectionOwnerId: string,
+  filters: RandomFilters,
+): Promise<number> {
   const rows = await db.execute<{ count: string }>(sql`
     select count(*)::text as count
     from discogs_releases r
-    where ${eligibleCondition(userId, filters)}
+    where ${eligibleCondition(collectionOwnerId, filters)}
   `);
 
   return Number(rows[0]?.count ?? 0);
@@ -77,6 +84,7 @@ export async function getActiveSession(userId: string): Promise<RandomSessionVie
   const rows = await db
     .select({
       id: randomSessions.id,
+      collectionOwnerId: randomSessions.collectionOwnerId,
       filterGenres: randomSessions.filterGenres,
       filterStyles: randomSessions.filterStyles,
       eligibleCount: randomSessions.eligibleCount,
@@ -98,10 +106,12 @@ export async function getSession(
   userId: string,
   sessionId: string,
 ): Promise<RandomSessionView | null> {
-  // Filtrage par utilisateur issu de la session serveur (§18.5).
+  // Filtrage par utilisateur issu de la session serveur (§18.5) : celui qui tire, pas
+  // forcément le propriétaire de la collection tirée (`collectionOwnerId`, Lot 7).
   const rows = await db
     .select({
       id: randomSessions.id,
+      collectionOwnerId: randomSessions.collectionOwnerId,
       filterGenres: randomSessions.filterGenres,
       filterStyles: randomSessions.filterStyles,
       eligibleCount: randomSessions.eligibleCount,
@@ -123,15 +133,21 @@ export async function getSession(
  * Ouvre une session de tirage. Une session active existante est close : changer de filtres
  * revient à commencer une nouvelle série, et RAND-003 ne peut pas arbitrer entre deux
  * sessions concurrentes.
+ *
+ * `collectionOwnerId` (Lot 7, partage) est figé ici, à la création : `draw()` le relit
+ * depuis la session plutôt que de le redemander à l'appelant, pour qu'une bascule de
+ * collection active en cours de route ne change jamais le bassin d'une session déjà
+ * ouverte (voir le commentaire du schéma, `random.ts`).
  */
 export async function createSession(
   userId: string,
+  collectionOwnerId: string,
   filters: RandomFilters,
   now = new Date(),
 ): Promise<RandomSessionView> {
   const genres = filters.genres ?? [];
   const styles = filters.styles ?? [];
-  const eligibleCount = await countEligible(userId, filters);
+  const eligibleCount = await countEligible(collectionOwnerId, filters);
 
   return db.transaction(async (tx) => {
     await tx
@@ -141,16 +157,26 @@ export async function createSession(
 
     const [created] = await tx
       .insert(randomSessions)
-      .values({ userId, filterGenres: genres, filterStyles: styles, eligibleCount })
+      .values({
+        userId,
+        collectionOwnerId,
+        filterGenres: genres,
+        filterStyles: styles,
+        eligibleCount,
+      })
       .returning({
         id: randomSessions.id,
+        collectionOwnerId: randomSessions.collectionOwnerId,
         filterGenres: randomSessions.filterGenres,
         filterStyles: randomSessions.filterStyles,
         eligibleCount: randomSessions.eligibleCount,
         completedAt: randomSessions.completedAt,
       });
 
-    log.info({ userId, sessionId: created!.id, eligibleCount, genres, styles }, 'session ouverte');
+    log.info(
+      { userId, collectionOwnerId, sessionId: created!.id, eligibleCount, genres, styles },
+      'session ouverte',
+    );
 
     return { ...created!, drawnCount: 0 };
   });
@@ -186,7 +212,7 @@ export async function draw(userId: string, sessionId: string): Promise<DrawResul
           0
         ) + 1
       from discogs_releases r
-      where ${eligibleCondition(userId, filters)}
+      where ${eligibleCondition(session.collectionOwnerId, filters)}
         and not exists (
           select 1 from random_session_releases rsr
           where rsr.session_id = ${sessionId}::uuid and rsr.release_id = r.id

@@ -8,4 +8,5 @@ export * from './collection';
 export * from './random';
 export * from './providers';
 export * from './radio';
+export * from './sharing';
 export * from './tasks';

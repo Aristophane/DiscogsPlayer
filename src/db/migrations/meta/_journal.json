@@ -57,6 +57,20 @@
       "when": 1788439575987,
       "tag": "0007_youthful_argent",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788448361111,
+      "tag": "0008_nebulous_morph",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788448773013,
+      "tag": "0009_medical_havok",
+      "breakpoints": true
     }
   ]
 }

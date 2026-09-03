@@ -461,6 +461,82 @@ existe — inchangé au-dessus de `sm:`, où il n'apparaît pas.
 203 tests unitaires et d'intégration (inchangé), 75 tests e2e
 (mobile/tablette/desktop).
 
+## Partage de collection, terminé le 2026-09-03
+
+Demande produit verbatim : « Fonctionnalité de partage de la collection. Je veux pouvoir
+parcourir la collection de mes amis. […] Cela suppose que nous gardions en base les
+collections de nos utilisateurs. » Absente de SPECIFICATION.md et de SPEC-GAPS.md :
+deux décisions produit tranchées avec l'utilisateur avant tout code (§24 — un lot ne
+démarre pas sur une hypothèse silencieuse pour une fonctionnalité de cette taille) :
+
+- **Invitation** : lien à usage unique généré par le propriétaire, consommé par un ami
+  qui s'authentifie avec son propre compte Discogs — aucune inscription séparée.
+- **Portée de l'accès une fois accordé** : « le fonctionnement dois rester le même
+  entre le mode ami et le mode perso. La seule chose qui change est la source de la
+  collection. » Autrement dit une **bascule** (une seule source active à la fois), pas
+  une fusion : Collection, Aléatoire, Radio et la fiche album se comportent à
+  l'identique, quelle que soit la collection consultée.
+
+**Nouveau module `sharing`** (`src/modules/sharing/`), deux tables : `collection_invites`
+(jeton à usage unique, hashé comme les sessions et les request tokens OAuth — même
+principe `UPDATE ... WHERE consumed_at IS NULL RETURNING` que `auth/service.ts`) et
+`collection_shares` (une ligne active par paire propriétaire/bénéficiaire, index unique
+partiel sur `revoked_at is null` — une révocation puis une réinvitation ne laisse jamais
+deux lignes vivantes pour la même paire).
+
+**`current-user.ts` porte désormais `activeCollectionOwnerId`** (et
+`activeCollectionOwner`, non nul seulement en consultant un ami), calculé à chaque
+requête par `resolveActiveCollection` : la session ne garde qu'un `viewingAsUserId` brut
+et **jamais vérifié seul** — chaque résolution revérifie `collection_shares` (§18.5).
+C'est ce qui fait qu'une révocation prend effet à la requête suivante, sans déconnexion
+ni purge de cache. `activeCollectionOwnerId` remplace `user.id` partout où un module lit
+la collection (collection, fiche album, Aléatoire, Radio) ; `user.id` reste seul légitime
+pour tout ce qui agit _au nom de_ quelqu'un — import Discogs (`sync/service.ts`),
+préférence Spotify, création d'invitation, révocation.
+
+**Défaut de conception évité avant d'écrire une route** : `randomSessions.userId` et
+`radioSessions.userId` servaient à la fois de propriétaire de session (contrainte « une
+session active ») et de périmètre de tirage. Les confondre avec `activeCollectionOwnerId`
+aurait cassé la contrainte « une session active » dès que deux utilisateurs consultent la
+même collection en même temps, et aurait permis à une bascule de collection en cours de
+session de changer silencieusement le bassin de tirage (RAND-003). Les deux tables ont
+donc reçu une colonne dédiée `collection_owner_id`, figée à la création, jamais
+redérivée par `draw()` — migration manuelle (drizzle-kit ne sait pas produire de
+`NOT NULL` sûr sur une table non vide) : ajout nullable, retro-remplissage
+`= user_id`, puis contrainte, comme au Lot 1 pour un cas similaire.
+
+**Deux failles de sécurité préexistantes, sans lien avec le partage, trouvées en
+auditant tout site d'appel `user.id`-scopé** (nécessaires à corriger : les laisser
+ouvertes aurait rendu tout le modèle de partage sans objet, ami ou pas) :
+`/api/resolutions/track` et `/api/resolutions/next` résolvaient et renvoyaient les
+informations de lecture d'une piste sans jamais vérifier que l'appelant y avait accès —
+n'importe quel utilisateur connecté pouvait résoudre n'importe quel identifiant de piste
+du catalogue partagé. Corrigées par le même contrôle `getReleaseForUser(...)` que porte
+déjà `/api/resolutions/album`.
+
+**Flux d'invitation pour un visiteur non connecté.** `/invitations/[token]` prévisualise
+l'invitation (propriétaire, validité) sans la consommer — un simple chargement de page
+(aperçu de messagerie, robot) ne doit jamais brûler un jeton à usage unique ; seule une
+confirmation explicite (bouton, POST) le fait. Non connecté, le visiteur passe par
+`/api/collection-shares/invites/[token]/begin`, qui pose un cookie `dp_pending_invite`
+court (15 min) puis redirige vers la connexion Discogs ; le callback OAuth
+(`api/auth/discogs/callback`) consomme ce cookie juste après avoir créé la session, avec
+la vraie identité qui vient de se connecter, et bascule immédiatement sur la collection
+de l'ami — le sens même de l'invitation, pas une étape séparée.
+
+**Interface** : un bandeau « Vous consultez la collection de {ami} » (avec retour à sa
+propre collection) sur toutes les pages qui lisent la collection active — accueil,
+collection, Aléatoire, Radio, fiche album — pour qu'il n'y ait jamais d'ambiguïté sur la
+source des tirages ou de la lecture. Les paramètres portent la gestion complète :
+génération et copie du lien, liste de ce qu'on a reçu (avec bascule) et de ce qu'on a
+accordé (avec révocation). L'import et sa progression, propres au compte du visiteur,
+disparaissent de la page collection en consultant celle d'un ami.
+
+223 tests unitaires et d'intégration (203 + 20 nouveaux : le module `sharing`, y
+compris `previewInvite`, et `resolveActiveCollection`), 81 tests e2e (75 + un nouveau
+scénario de bout en bout — invitation, bascule visible, retour, révocation à effet
+immédiat — mobile/tablette/desktop).
+
 ## Ordonnancement conseillé ensuite
 
 L'ordre des lots de §24 est bon, avec deux ajustements issus de l'analyse :
