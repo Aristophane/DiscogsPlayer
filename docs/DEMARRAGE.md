@@ -410,6 +410,32 @@ doublon sans rien piloter côté Spotify.
 203 tests unitaires et d'intégration (inchangé, aucune logique serveur nouvelle ici),
 69 tests e2e (mobile/tablette/desktop).
 
+## Responsive du lecteur sur petit mobile, 2026-09-03
+
+Défaut trouvé en vérifiant, pas signalé précisément par l'utilisateur (« faire le
+responsive ») : les quatre boutons ajoutés cette même session (son, suivant, replier,
+fermer) partageaient la ligne de la pochette et du titre. Aucun débordement de page
+(`scrollWidth` toujours correct, `truncate` masque proprement) — mais sous ~360 px, le
+titre n'avait plus que 46 px de large, tronqué à 3-4 caractères. Non détecté par le
+projet e2e « mobile » existant (préréglage Pixel 7, 412 px de large, plus confortable
+que le cas réel testé ici).
+
+Corrigé par une mise en page à deux lignes en dessous de `sm:` : pochette et titre sur
+une ligne pleine largeur, les quatre boutons sur une seconde ligne alignée à droite.
+`sm:contents` fait disparaître leur conteneur de la mise en page dès `sm:`, ce qui fait
+rejoindre les boutons à la ligne du dessus — la mise en page à une seule ligne d'origine,
+inchangée sur tablette et desktop.
+
+Un piège involontaire pendant le diagnostic, à ne pas refaire : une capture d'écran
+`fullPage: true` de Playwright sur une page avec un en-tête `sticky` et un lecteur
+`fixed` fait apparaître ces éléments en double, superposés au contenu — artefact connu
+du découpage en tranches d'un écran plein sur des éléments positionnés hors du flux
+normal, pas un vrai défaut de l'application. Diagnostiqué avec des captures cadrées sur
+le viewport réel, pas `fullPage`.
+
+203 tests unitaires et d'intégration (inchangé), 72 tests e2e
+(mobile/tablette/desktop).
+
 ## Ordonnancement conseillé ensuite
 
 L'ordre des lots de §24 est bon, avec deux ajustements issus de l'analyse :

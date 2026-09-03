@@ -170,6 +170,36 @@ test('le bouton play d’un album résout depuis la vidéo Discogs, sans écran 
   await expect(page.getByText('Résolution en cours…')).toHaveCount(0, { timeout: 5_000 });
 });
 
+test('sur petit mobile, les boutons du lecteur passent sous le titre plutôt que de l’écraser', async ({
+  page,
+}) => {
+  // 320 px, pas le préréglage « mobile » (Pixel 7, plus large) : c'est à cette largeur —
+  // toujours courante (iPhone SE) — que le défaut a été mesuré. Quatre boutons (son,
+  // suivant, replier, fermer) sur la même ligne que la pochette et le titre ne
+  // laissaient plus que 46 px au titre, tronqué à 3-4 caractères.
+  await page.setViewportSize({ width: 320, height: 690 });
+  await signIn(page);
+  await page.goto(`/sorties/${releaseWithVideoId}`);
+  await page.getByRole('button', { name: 'Lire l’album' }).click();
+
+  const title = page
+    .getByRole('region', { name: 'Lecture en cours' })
+    .locator('p.truncate')
+    .first();
+  await expect(title).toBeVisible({ timeout: 10_000 });
+
+  const box = await title.boundingBox();
+  expect(box).not.toBeNull();
+  // Largement au-dessus des ~46 px mesurés avant correction ; sous ~360 px de large de
+  // conteneur, un titre normal ne devrait plus jamais être écrasé à ce point.
+  expect(box!.width).toBeGreaterThan(150);
+
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  );
+  expect(overflow).toBe(false);
+});
+
 test('la vidéo dépliée remplit son cadre sans déborder (Lot 6bis)', async ({ page }) => {
   await signIn(page);
   await page.goto(`/sorties/${releaseWithVideoId}`);

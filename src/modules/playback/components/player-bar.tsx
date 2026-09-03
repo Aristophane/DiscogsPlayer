@@ -101,58 +101,69 @@ export function PlayerBar() {
     >
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-3 sm:px-6">
         {track ? (
-          <div className="flex items-center gap-3">
-            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded bg-surface">
-              <AlbumCover src={cover} title={track.releaseTitle} artists={track.artists} eager />
+          // Deux lignes sur petit mobile, une seule à partir de `sm:` : à quatre boutons
+          // (son, suivant, replier, fermer), les caser sur la même ligne que la pochette
+          // et le titre ne laissait presque plus de place au titre sous ~360 px — mesuré
+          // à 46 px de large restants, en pratique un titre tronqué à 3-4 caractères.
+          // `sm:contents` fait disparaître ce second conteneur de la mise en page dès
+          // `sm:` : ses enfants (les boutons) rejoignent alors directement la ligne du
+          // dessus, reproduisant la mise en page à une seule ligne d'origine.
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <div className="flex items-center gap-3">
+              <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded bg-surface">
+                <AlbumCover src={cover} title={track.releaseTitle} artists={track.artists} eager />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{track.title ?? track.releaseTitle}</p>
+                <p className="truncate text-xs text-muted">{track.artists}</p>
+              </div>
             </div>
 
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{track.title ?? track.releaseTitle}</p>
-              <p className="truncate text-xs text-muted">{track.artists}</p>
+            <div className="flex shrink-0 items-center justify-end gap-2 sm:contents">
+              {state.status === 'playing_youtube' ? (
+                <button
+                  type="button"
+                  onClick={toggleMute}
+                  aria-pressed={muted}
+                  aria-label={muted ? t('player.unmute') : t('player.mute')}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-sm"
+                >
+                  <span aria-hidden="true">{muted ? '🔇' : '🔊'}</span>
+                </button>
+              ) : null}
+
+              {canSkip ? (
+                <button
+                  type="button"
+                  onClick={skip}
+                  aria-label={t('player.skip')}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-sm"
+                >
+                  <span aria-hidden="true">⏭</span>
+                </button>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={() => setExpanded((value) => !value)}
+                aria-expanded={expanded}
+                aria-controls="player-bar-expandable"
+                aria-label={expanded ? t('player.collapse') : t('player.expand')}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-sm"
+              >
+                <span aria-hidden="true">{expanded ? '▾' : '▴'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={close}
+                aria-label={t('player.close')}
+                className="rounded-md border border-border px-3 py-1.5 text-sm"
+              >
+                ✕
+              </button>
             </div>
-
-            {state.status === 'playing_youtube' ? (
-              <button
-                type="button"
-                onClick={toggleMute}
-                aria-pressed={muted}
-                aria-label={muted ? t('player.unmute') : t('player.mute')}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-sm"
-              >
-                <span aria-hidden="true">{muted ? '🔇' : '🔊'}</span>
-              </button>
-            ) : null}
-
-            {canSkip ? (
-              <button
-                type="button"
-                onClick={skip}
-                aria-label={t('player.skip')}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-sm"
-              >
-                <span aria-hidden="true">⏭</span>
-              </button>
-            ) : null}
-
-            <button
-              type="button"
-              onClick={() => setExpanded((value) => !value)}
-              aria-expanded={expanded}
-              aria-controls="player-bar-expandable"
-              aria-label={expanded ? t('player.collapse') : t('player.expand')}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-sm"
-            >
-              <span aria-hidden="true">{expanded ? '▾' : '▴'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={close}
-              aria-label={t('player.close')}
-              className="rounded-md border border-border px-3 py-1.5 text-sm"
-            >
-              ✕
-            </button>
           </div>
         ) : null}
 
