@@ -64,6 +64,9 @@ type PlaybackContextValue = {
   playFromRadio: (radioSessionId: string) => Promise<void>;
   /** Passe à la suite : piste suivante de l'album, ou tirage suivant en Radio. */
   skip: () => void;
+  /** Coupure du son du lecteur YouTube — sans effet sur l'Embed Spotify (§ commentaire). */
+  muted: boolean;
+  toggleMute: () => void;
   close: () => void;
   /**
    * Ref callback à poser sur le conteneur stable du lecteur (`PlayerBar`). Le nœud que
@@ -138,6 +141,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // compteur avant d'appliquer chaque résultat : si l'utilisateur a demandé autre chose
   // entre-temps, la réponse tardive du sondage ne doit rien écraser.
   const requestTokenRef = useRef(0);
+  // Préférence de coupure du son, indépendante de la piste : un changement de piste
+  // (même à l'intérieur du même lecteur YouTube, via `loadVideoById`) ne doit pas
+  // rétablir le son tout seul. Une ref pour la lire de façon synchrone dans
+  // `mountYoutubePlayer` (fermeture prise avant l'attente réseau du chargement de
+  // l'API), un state jumeau pour que l'interface se redessine au bouton.
+  const mutedRef = useRef(false);
+  const [muted, setMutedState] = useState(false);
 
   function updateState(next: PlaybackState): void {
     stateRef.current = next;
@@ -194,7 +204,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         // « play » est un vrai geste utilisateur, donc l'appel explicite dans `onReady`
         // est autorisé par les politiques d'autoplay et sert de filet de sécurité — sans
         // lui, la lecture démarrait parfois en pause, forçant à recliquer dans le lecteur.
-        playerVars: { playsinline: 1, autoplay: 1 },
+        // `mute` reprend la préférence en vigueur : un nouveau lecteur (album différent,
+        // ou premier lecteur de la session) doit rester coupé si l'utilisateur l'avait
+        // demandé — `loadVideoById` (branche au-dessus) n'a pas besoin de cette ligne,
+        // il réutilise le même lecteur, dont l'état de coupure ne bouge pas tout seul.
+        playerVars: { playsinline: 1, autoplay: 1, mute: mutedRef.current ? 1 : 0 },
         events: {
           onReady: (event) => {
             event.target.playVideo();
@@ -458,9 +472,36 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     void advanceQueue();
   }, [advanceQueue]);
 
+  /**
+   * Coupe ou rétablit le son de la vidéo YouTube en cours. N'agit que sur le lecteur
+   * YouTube (seul fournisseur avec une API programmable ici) : l'Embed Spotify porte ses
+   * propres contrôles, volume compris, dans son interface intégrée.
+   */
+  const toggleMute = useCallback(() => {
+    const next = !mutedRef.current;
+    mutedRef.current = next;
+    setMutedState(next);
+
+    if (next) {
+      playerRef.current?.mute();
+    } else {
+      playerRef.current?.unMute();
+    }
+  }, []);
+
   return (
     <PlaybackContext.Provider
-      value={{ state, playTrack, playAlbum, playFromRadio, skip, close, setYoutubeContainer }}
+      value={{
+        state,
+        playTrack,
+        playAlbum,
+        playFromRadio,
+        skip,
+        muted,
+        toggleMute,
+        close,
+        setYoutubeContainer,
+      }}
     >
       {children}
     </PlaybackContext.Provider>

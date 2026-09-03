@@ -192,6 +192,27 @@ test('la vidéo dépliée remplit son cadre sans déborder (Lot 6bis)', async ({
   expect(Math.abs(videoBox!.height - containerBox!.height)).toBeLessThanOrEqual(1);
 });
 
+test('le bouton de volume coupe puis rétablit le son de la vidéo', async ({ page }) => {
+  await signIn(page);
+  await page.goto(`/sorties/${releaseWithVideoId}`);
+  await page.getByRole('button', { name: 'Lire l’album' }).click();
+  await expect(page.locator('iframe[src*="youtube.com"]')).toBeVisible({ timeout: 10_000 });
+
+  const button = page.getByRole('button', { name: 'Couper le son' });
+  await expect(button).toHaveAttribute('aria-pressed', 'false');
+
+  await button.click();
+
+  const unmute = page.getByRole('button', { name: 'Rétablir le son' });
+  await expect(unmute).toHaveAttribute('aria-pressed', 'true');
+
+  await unmute.click();
+  await expect(page.getByRole('button', { name: 'Couper le son' })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
+});
+
 test('le bouton « piste suivante » avance dans l’album', async ({ page }) => {
   await signIn(page);
   await page.goto(`/sorties/${releaseWithVideoId}`);

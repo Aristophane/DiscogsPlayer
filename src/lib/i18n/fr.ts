@@ -158,6 +158,8 @@ export const fr = {
   'player.loading.tracklistPending': 'Récupération des pistes de l’album…',
   'player.close': 'Fermer le lecteur',
   'player.skip': 'Piste suivante',
+  'player.mute': 'Couper le son',
+  'player.unmute': 'Rétablir le son',
   'player.expand': 'Déplier le lecteur',
   'player.collapse': 'Replier le lecteur',
   'player.openSpotify': 'Ouvrir dans Spotify',

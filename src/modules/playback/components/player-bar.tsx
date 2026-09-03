@@ -35,9 +35,14 @@ import { usePlayback } from '../playback-context';
  * l'iframe garde ses dimensions par défaut (640×360 en dur, hors du contrôle de
  * Tailwind puisque React ne la rend jamais) et déborde de son conteneur au lieu de s'y
  * adapter — défaut réel observé, visible à l'écran comme une vidéo rognée.
+ *
+ * Coupure du son (`toggleMute`, playback-context.tsx) : seulement pour YouTube, seul
+ * fournisseur avec une API programmable ici. L'Embed Spotify porte ses propres
+ * contrôles, volume compris, dans son interface intégrée — un second bouton ferait
+ * doublon sans rien piloter côté Spotify.
  */
 export function PlayerBar() {
-  const { state, skip, close, setYoutubeContainer } = usePlayback();
+  const { state, skip, muted, toggleMute, close, setYoutubeContainer } = usePlayback();
   const [expanded, setExpanded] = useState(true);
   const barRef = useRef<HTMLDivElement>(null);
   // Vrai seulement à la transition idle → actif : un repli choisi par l'utilisateur reste
@@ -105,6 +110,18 @@ export function PlayerBar() {
               <p className="truncate text-sm font-medium">{track.title ?? track.releaseTitle}</p>
               <p className="truncate text-xs text-muted">{track.artists}</p>
             </div>
+
+            {state.status === 'playing_youtube' ? (
+              <button
+                type="button"
+                onClick={toggleMute}
+                aria-pressed={muted}
+                aria-label={muted ? t('player.unmute') : t('player.mute')}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-sm"
+              >
+                <span aria-hidden="true">{muted ? '🔇' : '🔊'}</span>
+              </button>
+            ) : null}
 
             {canSkip ? (
               <button

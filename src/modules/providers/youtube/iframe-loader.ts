@@ -40,6 +40,9 @@ export type YtPlayer = {
   loadVideoById: (videoId: string) => void;
   playVideo: () => void;
   pauseVideo: () => void;
+  mute: () => void;
+  unMute: () => void;
+  isMuted: () => boolean;
   destroy: () => void;
 };
 

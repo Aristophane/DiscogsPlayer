@@ -398,7 +398,17 @@ contraindre puisqu'on ne peut pas lui poser de classe par JSX. Vérifié en e2e 
 comparaison directe des rectangles réels de l'iframe et de son conteneur (tolérance
 1 px), pas seulement par capture d'écran.
 
-203 tests unitaires et d'intégration, 66 tests e2e (mobile/tablette/desktop).
+**Bouton de volume (coupure du son).** Ajouté après coup, même session. `mute`/`unMute`/
+`isMuted` (API YouTube IFrame) exposés dans `YtPlayer` (`iframe-loader.ts`) ; préférence
+tenue dans `playback-context.tsx` (`mutedRef` + `muted`), indépendante de la piste — un
+changement de piste (même `loadVideoById` sur le même lecteur) ne doit pas rétablir le
+son tout seul, et un nouveau lecteur créé pendant que la préférence est active démarre
+coupé (`playerVars.mute`). Seulement pour YouTube : l'Embed Spotify porte ses propres
+contrôles, volume compris, dans son interface intégrée — un second bouton ferait
+doublon sans rien piloter côté Spotify.
+
+203 tests unitaires et d'intégration (inchangé, aucune logique serveur nouvelle ici),
+69 tests e2e (mobile/tablette/desktop).
 
 ## Ordonnancement conseillé ensuite
 
