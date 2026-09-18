@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -26,8 +26,9 @@ const LINKS: { href: string; labelKey: MessageKey }[] = [
   { href: '/parametres', labelKey: 'nav.settings' },
 ];
 
-export function AppHeader() {
+export function AppHeader({ collectionSwitcher }: { collectionSwitcher: ReactNode }) {
   const pathname = usePathname();
+  const headerRef = useRef<HTMLElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   // Filet de sécurité au-delà du `onClick` de chaque lien (qui referme déjà le panneau) :
   // couvre aussi la navigation par bouton précédent/suivant du navigateur. Ajustée
@@ -40,13 +41,32 @@ export function AppHeader() {
     setMobileOpen(false);
   }
 
+  // Les contrôles flottants restent sous l'en-tête, y compris menu mobile déplié.
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+    const update = () => {
+      document.documentElement.style.setProperty(
+        '--app-header-height',
+        `${header.getBoundingClientRect().height}px`,
+      );
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(header);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty('--app-header-height');
+    };
+  }, [pathname]);
+
   // Pas d'en-tête sur l'écran de connexion : sa mise en page est volontairement seule (§6.1).
   if (pathname === '/connexion') {
     return null;
   }
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-background">
+    <header ref={headerRef} className="sticky top-0 z-30 border-b border-border bg-background">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <Link
           href="/"
@@ -86,6 +106,12 @@ export function AppHeader() {
           <span aria-hidden="true">{mobileOpen ? '✕' : '☰'}</span>
         </button>
       </div>
+
+      {collectionSwitcher ? (
+        <div className="border-t border-border bg-surface/40">
+          <div className="mx-auto w-full max-w-6xl px-4 py-2 sm:px-6">{collectionSwitcher}</div>
+        </div>
+      ) : null}
 
       {mobileOpen ? (
         <nav

@@ -6,6 +6,9 @@ import { AppHeader } from '@/modules/navigation/components/app-header';
 import { NowSpinningBackground } from '@/modules/playback/components/now-spinning';
 import { PlayerBar } from '@/modules/playback/components/player-bar';
 import { PlaybackProvider } from '@/modules/playback/playback-context';
+import { getCurrentUser } from '@/modules/auth/current-user';
+import { listGrantsReceivedBy } from '@/modules/sharing/service';
+import { CollectionSwitcher } from '@/modules/sharing/components/collection-switcher';
 
 import './globals.css';
 
@@ -23,7 +26,9 @@ export const viewport: Viewport = {
 
 // Typage explicite plutôt que le global `LayoutProps` généré par Next : `npm run typecheck`
 // doit fonctionner sur un dépôt fraîchement cloné, avant tout `next build`.
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const user = await getCurrentUser();
+  const friends = user ? await listGrantsReceivedBy(user.id) : [];
   return (
     <html lang={DEFAULT_LOCALE} className="h-full antialiased">
       <body className="flex min-h-full flex-col bg-background text-foreground">
@@ -38,7 +43,20 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               change rien d'autre — la pile négative du composant le maintient sous
               tout contenu normal quel que soit cet ordre. */}
           <NowSpinningBackground />
-          <AppHeader />
+          <AppHeader
+            collectionSwitcher={
+              user ? (
+                <CollectionSwitcher
+                  ownId={user.id}
+                  activeOwnerId={user.activeCollectionOwnerId}
+                  friends={friends.map(({ ownerId, ownerUsername }) => ({
+                    ownerId,
+                    ownerUsername,
+                  }))}
+                />
+              ) : null
+            }
+          />
           {/*
             L'espace réservé suit la hauteur réelle de la barre de lecture (variable CSS
             posée par `PlayerBar`), pas une valeur figée : une vidéo YouTube affichée fait

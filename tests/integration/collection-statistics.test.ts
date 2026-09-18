@@ -73,6 +73,45 @@ afterAll(async () => {
 });
 
 describe('tops personnels et compteurs', () => {
+  it.each(['have_desc', 'want_desc', 'value_desc'] as const)(
+    'trie %s avec des ex æquo, zéros et inconnus sans doublon de pagination',
+    async (sort) => {
+      for (let n = 1; n <= 8; n++) {
+        const value = n === 1 ? null : n === 2 ? 0 : n < 6 ? 12 : 100;
+        await db
+          .update(discogsReleases)
+          .set({
+            communityHave: value,
+            communityWant: value,
+            lowestPriceEur:
+              value === null ? null : n === 5 ? '12.09' : n === 4 ? '12.10' : String(value),
+            numForSale: n === 6 ? 0 : 1,
+          })
+          .where(eq(discogsReleases.discogsReleaseId, R(n)));
+      }
+      const full = await listCollection(ownerId, { sort });
+      const seen: string[] = [];
+      let cursor: string | undefined;
+      for (let page = 0; page < 10; page++) {
+        const result = await listCollection(ownerId, { sort, limit: 1, cursor });
+        seen.push(...result.items.map((item) => item.discogsReleaseId));
+        if (!result.nextCursor) break;
+        cursor = result.nextCursor;
+      }
+      expect(seen).toEqual(full.items.map((item) => item.discogsReleaseId));
+      expect(new Set(seen).size).toBe(8);
+      if (sort === 'value_desc') {
+        expect(seen.slice(2, 6)).toEqual([R(4), R(5), R(3), R(2)]);
+        expect(new Set(seen.slice(-2))).toEqual(new Set([R(1), R(6)]));
+      } else {
+        expect(seen.slice(-2)).toEqual([R(2), R(1)]);
+      }
+      expect(
+        (await listCollection(friendId, { sort })).items.map((item) => item.discogsReleaseId),
+      ).toEqual([R(10)]);
+    },
+  );
+
   it('limite les tops à cinq éditions actives distinctes du propriétaire', async () => {
     const result = await getCollectionHighlights(ownerId);
     expect(result.wanted.map((r) => r.discogsReleaseId)).toEqual([8, 7, 6, 5, 4].map(R));

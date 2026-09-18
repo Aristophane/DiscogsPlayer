@@ -100,7 +100,7 @@ export function NowSpinningBackground() {
           (§SPEC-GAPS G-17). Une taille modeste plutôt qu'un masquage sous `sm:` : le
           plein écran doit rester atteignable depuis un téléphone aussi, pas seulement
           au-delà d'un certain gabarit. */}
-      <div className="pointer-events-none fixed top-20 right-3 z-10 sm:top-24 sm:right-4">
+      <div className="pointer-events-none fixed top-[calc(var(--app-header-height,4rem)+1rem)] right-3 z-10 sm:right-4">
         <button
           type="button"
           onClick={openFullscreen}

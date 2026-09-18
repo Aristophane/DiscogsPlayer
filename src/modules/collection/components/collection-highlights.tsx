@@ -45,7 +45,7 @@ export function CollectionHighlights({
       ) : (
         <>
           <RefreshStatistics highlights={highlights} onUpdate={setHighlights} />
-          <div className="grid gap-8 md:grid-cols-2">
+          <div className="grid gap-10">
             <Ranking kind="valuable" items={highlights.valuable} switchToOwn={viewingFriend} />
             <Ranking kind="wanted" items={highlights.wanted} switchToOwn={viewingFriend} />
           </div>
@@ -76,24 +76,28 @@ function Ranking({
           {t(kind === 'wanted' ? 'home.highlights.noWanted' : 'home.highlights.noPrice')}
         </p>
       ) : (
-        <ol className="mt-4 divide-y divide-border">
+        <ol className="mt-5 grid grid-cols-2 items-start gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-5">
           {items.map((item, index) => (
-            <li key={item.discogsReleaseId} className="flex items-start gap-3 py-4">
-              <span
-                aria-hidden="true"
-                className="w-5 shrink-0 pt-1 text-sm tabular-nums text-muted"
-              >
-                {String(index + 1).padStart(2, '0')}
-              </span>
+            <li key={item.discogsReleaseId} className="min-w-0">
               <div className="min-w-0 flex-1">
-                <PersonalReleaseLink releaseId={item.discogsReleaseId} switchToOwn={switchToOwn}>
-                  <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded bg-surface">
+                <PersonalReleaseLink
+                  releaseId={item.discogsReleaseId}
+                  switchToOwn={switchToOwn}
+                  layout="cover"
+                >
+                  <div className="relative aspect-square w-full overflow-hidden rounded-md bg-surface">
                     <AlbumCover
                       src={coverProxyUrl(item.coverUrl)}
                       title={item.title}
                       artists={item.artists}
                       className="h-full w-full object-cover"
                     />
+                    <span
+                      aria-hidden="true"
+                      className="absolute left-2 top-2 rounded bg-background px-2 py-1 text-xs font-semibold tabular-nums"
+                    >
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="line-clamp-2 text-sm font-medium leading-snug">{item.title}</p>

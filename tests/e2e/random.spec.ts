@@ -75,17 +75,17 @@ async function signIn(page: Page) {
     .addCookies([{ name: 'dp_session', value: token, domain: 'localhost', path: '/' }]);
 }
 
-test('l’accueil connecté propose les trois entrées', async ({ page }, testInfo) => {
+test('l’accueil réserve les trois entrées au menu', async ({ page }, testInfo) => {
   await signIn(page);
   await page.goto('/');
 
-  // `main` exclut l'en-tête, qui porte désormais ses propres liens de même nom (Lot 6).
   const hub = page.getByRole('main');
-  await expect(hub.getByRole('link', { name: /Collection/ })).toBeVisible();
-  await expect(hub.getByRole('link', { name: /Aléatoire/ })).toBeVisible();
-
-  // La Radio est active depuis le Lot 6 : un lien réel, pas une annonce désactivée.
-  await expect(hub.getByRole('link', { name: /Radio/ })).toBeVisible();
+  await expect(hub.getByRole('navigation')).toHaveCount(0);
+  const menu = page.getByRole('button', { name: 'Ouvrir le menu' });
+  if (await menu.isVisible()) await menu.click();
+  for (const name of ['Collection', 'Aléatoire', 'Radio']) {
+    await expect(page.getByRole('banner').getByRole('link', { name, exact: true })).toBeVisible();
+  }
 
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])

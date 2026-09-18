@@ -239,9 +239,10 @@ test('le lecteur survit à une navigation vers Radio depuis l’accueil (SPEC-GA
   await expect(page).toHaveURL(/\/$/);
   await expect(player).toBeVisible();
 
-  // La tuile de l'accueil, pas le lien « Radio » de l'en-tête (même libellé, deux
-  // liens) : c'est elle qui causait le défaut, scopée via `<main>` pour la distinguer.
-  await page.locator('main').getByRole('link', { name: /Radio/ }).click();
+  // Les entrées de l'accueil sont désormais regroupées dans le menu global.
+  const menu = page.getByRole('button', { name: 'Ouvrir le menu' });
+  if (await menu.isVisible()) await menu.click();
+  await page.getByRole('banner').getByRole('link', { name: 'Radio', exact: true }).click();
 
   await expect(page).toHaveURL(/\/radio$/);
   // Toujours visible, avec la même piste : une navigation plein document aurait tout

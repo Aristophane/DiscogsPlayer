@@ -79,6 +79,11 @@ export const fr = {
   'collection.sort.artist_asc': 'Artiste (A→Z)',
   'collection.sort.title_asc': 'Titre (A→Z)',
   'collection.sort.year_desc': 'Année (récent)',
+  'collection.sort.have_desc': 'En collection (décroissant)',
+  'collection.sort.want_desc': 'En wantlist (décroissant)',
+  'collection.sort.value_desc': 'Valeur marchande (décroissant)',
+  'collection.sort.value.hint':
+    'Valeur marchande : prix minimum proposé sur Discogs, en euros. Les éditions sans prix disponible apparaissent en dernier.',
   'collection.filters.genres': 'Genres',
   'collection.filters.styles': 'Styles',
   'collection.filters.clear': 'Retirer tous les filtres',

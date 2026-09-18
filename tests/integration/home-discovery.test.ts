@@ -6,7 +6,12 @@ import { getFriendsActivity, getRandomSpotlight } from '@/modules/collection/ser
 import { revokeGrant } from '@/modules/sharing/service';
 
 const userIds = ['test-home-viewer', 'test-home-friend', 'test-home-stranger'];
-const releaseIds = ['test-home-first', 'test-home-latest', 'test-home-removed'];
+const releaseIds = [
+  'test-home-first',
+  'test-home-latest',
+  'test-home-removed',
+  ...Array.from({ length: 5 }, (_, i) => `test-home-extra-${i}`),
+];
 let viewer: string;
 let friend: string;
 let stranger: string;
@@ -70,6 +75,20 @@ afterAll(async () => {
 });
 
 describe('découvertes de l’accueil', () => {
+  it('limite le fil aux cinq actualités les plus récentes', async () => {
+    await db.insert(collectionShares).values({ ownerId: friend, granteeId: viewer });
+    await db.insert(collectionInstances).values(
+      releases.slice(3).map((releaseId, index) => ({
+        userId: friend,
+        releaseId,
+        discogsInstanceId: `extra-${index}`,
+        dateAdded: new Date(`2026-06-0${index + 1}`),
+      })),
+    );
+    const feed = await getFriendsActivity(viewer);
+    expect(feed.map((item) => item.discogsReleaseId)).toEqual(releaseIds.slice(3).reverse());
+  });
+
   it('affiche seulement les ajouts des amis ayant partagé leur collection, triés et dédupliqués', async () => {
     expect(await getFriendsActivity(viewer)).toEqual([]);
     await db.insert(collectionShares).values({ ownerId: friend, granteeId: viewer });

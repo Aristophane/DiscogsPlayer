@@ -9,7 +9,15 @@
  */
 import { z } from 'zod';
 
-export const SORT_OPTIONS = ['date_added_desc', 'artist_asc', 'title_asc', 'year_desc'] as const;
+export const SORT_OPTIONS = [
+  'date_added_desc',
+  'artist_asc',
+  'title_asc',
+  'year_desc',
+  'have_desc',
+  'want_desc',
+  'value_desc',
+] as const;
 export type SortOption = (typeof SORT_OPTIONS)[number];
 export const DEFAULT_SORT: SortOption = 'date_added_desc';
 

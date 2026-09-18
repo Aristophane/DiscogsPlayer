@@ -11,18 +11,19 @@ export function PersonalReleaseLink({
   switchToOwn,
   children,
   ownerId = null,
+  layout = 'row',
 }: {
   releaseId: string;
   switchToOwn: boolean;
   children: ReactNode;
   ownerId?: string | null;
+  layout?: 'row' | 'cover';
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState(false);
   const href = `/sorties/${releaseId}`;
-  const className =
-    'flex min-w-0 flex-1 items-center gap-3 rounded-md text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-current';
+  const className = `flex min-w-0 flex-1 gap-3 rounded-md text-left focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-current ${layout === 'cover' ? 'flex-col items-stretch' : 'items-center'}`;
   if (!switchToOwn)
     return (
       <Link href={href} className={className}>

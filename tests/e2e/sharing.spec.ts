@@ -222,7 +222,7 @@ test('changer de collection remplace les albums et réinitialise la recherche', 
   // Un refus conserve la collection affichée et permet de réessayer.
   await page.route('**/api/collection-shares/active', (route) => route.fulfill({ status: 403 }));
   await switcher.selectOption({ label: 'e2e_alice_sharing' });
-  await expect(page.getByRole('main').getByRole('alert')).toHaveText(
+  await expect(page.getByRole('banner').getByRole('alert')).toHaveText(
     'Une erreur est survenue. Réessayez.',
   );
   await expect(switcher.locator('option:checked')).toHaveText('Ma collection');

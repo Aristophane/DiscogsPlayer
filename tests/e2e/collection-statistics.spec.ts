@@ -68,7 +68,10 @@ test('les tops personnels sont classés, accessibles et sans débordement', asyn
   await expect(valuable.getByRole('listitem').first()).toContainText('153,00');
   await expect(wanted.getByText('Album de mon ami')).toHaveCount(0);
   await expect(page.getByText(/ne représente pas une vente conclue/)).toBeVisible();
-  await page.getByRole('button', { name: 'Actualiser l’affichage' }).click();
+  await expect(page.getByRole('progressbar')).toHaveCount(0);
+  await expect(page.getByText(/Actualisation terminée/)).toHaveCount(0);
+  await expect(page.getByRole('main').getByRole('link', { name: 'Paramètres' })).toHaveCount(0);
+  await expect(page.getByRole('main').getByRole('navigation')).toHaveCount(0);
   await expect(wanted.getByRole('listitem')).toHaveCount(5);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
@@ -105,7 +108,7 @@ test('les classements et la barre progressent automatiquement toutes les cinq se
   await expect(spotlight.getByRole('link')).toBeVisible();
   const suggested = await spotlight.getByRole('link').getAttribute('href');
   await sql`update discogs_releases set statistics_fetched_at = now(), community_want = 9999, lowest_price_eur = 9999 where discogs_release_id = ${R(1)}`;
-  await expect(progress).toHaveAttribute('aria-valuenow', '6', { timeout: 12_000 });
+  await expect(progress).toHaveCount(0, { timeout: 12_000 });
   for (const title of ['Les plus wanted', 'Les mieux valorisés à la vente']) {
     await expect(
       page.getByRole('region', { name: title, exact: true }).getByRole('listitem').first(),
@@ -189,4 +192,49 @@ test('une collection vide explique comment obtenir les tops', async ({ page }) =
       .getByRole('region', { name: 'Le top de votre collection' })
       .getByRole('link', { name: 'Synchroniser' }),
   ).toHaveAttribute('href', '/import');
+});
+
+test('le sélecteur du header reste disponible sur chaque écran et ouvre la collection depuis une fiche', async ({
+  page,
+}) => {
+  const header = page.getByRole('banner');
+  const switcher = header.getByRole('combobox', { name: 'Collection affichée' });
+  for (const path of [
+    '/',
+    '/collection',
+    '/aleatoire',
+    '/radio',
+    '/amis',
+    '/parametres',
+    '/import',
+  ]) {
+    await page.goto(path);
+    await expect(switcher).toBeVisible();
+    await expect(switcher).toHaveValue(ownerId);
+    await switcher.selectOption(friendId);
+    await expect(switcher).toHaveValue(friendId);
+    await expect(switcher.locator('option:checked')).toHaveText('stats_friend');
+    await switcher.selectOption(ownerId);
+    await expect(switcher).toHaveValue(ownerId);
+  }
+  await page.goto(`/sorties/${R(1)}`);
+  await switcher.selectOption(friendId);
+  await expect(page).toHaveURL(/\/collection$/);
+  await expect(page.getByRole('link', { name: /Album de mon ami/ })).toBeVisible();
+  await expect(switcher).toHaveValue(friendId);
+});
+
+test('les trois nouveaux tris ordonnent les albums de la collection', async ({ page }) => {
+  await page.goto('/collection');
+  const sort = page.getByRole('combobox', { name: 'Trier', exact: true });
+  for (const value of ['have_desc', 'want_desc', 'value_desc']) {
+    await sort.selectOption(value);
+    await expect(
+      page.getByRole('main').getByRole('list').getByRole('listitem').first(),
+    ).toContainText('Édition 6');
+    await expect(
+      page.getByRole('main').getByRole('list').getByRole('listitem').last(),
+    ).toContainText('Édition 1');
+  }
+  await expect(page.getByText(/Valeur marchande : prix minimum/)).toBeVisible();
 });

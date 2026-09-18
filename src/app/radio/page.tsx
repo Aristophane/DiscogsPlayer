@@ -31,7 +31,7 @@ export default async function RadioPage() {
         <ViewingAsBanner ownerUsername={user.activeCollectionOwner.username} />
       ) : null}
 
-      <RadioLauncher facets={facets} />
+      <RadioLauncher key={user.activeCollectionOwnerId} facets={facets} />
     </main>
   );
 }

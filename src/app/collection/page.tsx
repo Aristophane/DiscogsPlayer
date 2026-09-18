@@ -6,8 +6,6 @@ import { getCurrentUser } from '@/modules/auth/current-user';
 import { CollectionBrowser } from '@/modules/collection/components/collection-browser';
 import { countCollection, listCollection, listFacets } from '@/modules/collection/service';
 import { ViewingAsBanner } from '@/modules/sharing/components/viewing-as-banner';
-import { CollectionSwitcher } from '@/modules/sharing/components/collection-switcher';
-import { listGrantsReceivedBy } from '@/modules/sharing/service';
 
 /**
  * Collection (§7.1, §7.3).
@@ -19,11 +17,10 @@ export default async function CollectionPage() {
     redirect('/connexion');
   }
 
-  const [page, total, facets, friends] = await Promise.all([
+  const [page, total, facets] = await Promise.all([
     listCollection(user.activeCollectionOwnerId),
     countCollection(user.activeCollectionOwnerId),
     listFacets(user.activeCollectionOwnerId),
-    listGrantsReceivedBy(user.id),
   ]);
 
   return (
@@ -54,12 +51,6 @@ export default async function CollectionPage() {
           </Link>
         )}
       </header>
-
-      <CollectionSwitcher
-        ownId={user.id}
-        activeOwnerId={user.activeCollectionOwnerId}
-        friends={friends.map(({ ownerId, ownerUsername }) => ({ ownerId, ownerUsername }))}
-      />
 
       {user.activeCollectionOwner ? (
         <ViewingAsBanner ownerUsername={user.activeCollectionOwner.username} />

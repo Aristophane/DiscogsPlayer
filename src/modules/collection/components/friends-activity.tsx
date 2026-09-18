@@ -40,7 +40,7 @@ export async function FriendsActivity({
                 ownerId={item.ownerId}
                 switchToOwn={activeOwnerId !== item.ownerId}
               >
-                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded bg-surface">
+                <div className="relative aspect-square w-32 shrink-0 overflow-hidden rounded-md bg-surface sm:w-40">
                   <AlbumCover
                     src={coverProxyUrl(item.coverUrl)}
                     title={item.title}

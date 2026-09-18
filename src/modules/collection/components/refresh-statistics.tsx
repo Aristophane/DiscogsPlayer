@@ -61,6 +61,8 @@ export function RefreshStatistics({
 
   useEffect(() => () => request.current?.abort(), []);
 
+  if (!loading) return null;
+
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-muted">

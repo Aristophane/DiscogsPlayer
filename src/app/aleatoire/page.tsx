@@ -33,7 +33,7 @@ export default async function AleatoirePage() {
         <ViewingAsBanner ownerUsername={user.activeCollectionOwner.username} />
       ) : null}
 
-      <RandomDrawer facets={facets} initialEligible={eligible} />
+      <RandomDrawer key={user.activeCollectionOwnerId} facets={facets} initialEligible={eligible} />
     </main>
   );
 }

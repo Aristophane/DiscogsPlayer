@@ -55,7 +55,7 @@ export type CollectionPageResult = {
  */
 const SORT_KEYS: Record<
   SortOption,
-  { expression: SQL; direction: 'asc' | 'desc'; cast: 'timestamptz' | 'int' | 'text' }
+  { expression: SQL; direction: 'asc' | 'desc'; cast: 'timestamptz' | 'int' | 'text' | 'numeric' }
 > = {
   date_added_desc: {
     expression: sql`min(${collectionInstances.dateAdded})`,
@@ -75,6 +75,21 @@ const SORT_KEYS: Record<
     cast: 'text',
   },
   year_desc: { expression: sql`min(${discogsReleases.year})`, direction: 'desc', cast: 'int' },
+  have_desc: {
+    expression: sql`min(${discogsReleases.communityHave})`,
+    direction: 'desc',
+    cast: 'int',
+  },
+  want_desc: {
+    expression: sql`min(${discogsReleases.communityWant})`,
+    direction: 'desc',
+    cast: 'int',
+  },
+  value_desc: {
+    expression: sql`min(case when ${discogsReleases.numForSale} > 0 then ${discogsReleases.lowestPriceEur} end)`,
+    direction: 'desc',
+    cast: 'numeric',
+  },
 };
 
 /** Filtres communs à la liste et au comptage. */
@@ -323,7 +338,7 @@ export async function getFriendsActivity(userId: string) {
       collectionInstances.userId,
       discogsReleases.id,
     )
-    .limit(12);
+    .limit(5);
   const usernames = new Map(grants.map((grant) => [grant.ownerId, grant.ownerUsername]));
   return rows.map((row) => ({ ...row, ownerUsername: usernames.get(row.ownerId)! }));
 }

@@ -163,6 +163,10 @@ export function CollectionBrowser({
         </button>
       </div>
 
+      {sort === 'value_desc' ? (
+        <p className="text-xs text-muted">{t('collection.sort.value.hint')}</p>
+      ) : null}
+
       <div id="collection-filters" hidden={!showFilters} className="flex flex-col gap-3">
         <FacetGroup
           legend={t('collection.filters.genres')}

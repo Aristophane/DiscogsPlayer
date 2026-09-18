@@ -4,20 +4,14 @@ import { t } from '@/lib/i18n';
 import { Logo } from '@/lib/ui/logo';
 import { getCurrentUser } from '@/modules/auth/current-user';
 import { SpotifyPreferenceToggle } from '@/modules/auth/components/spotify-preference';
-import { countCollection, getCollectionHighlights } from '@/modules/collection/service';
+import { getCollectionHighlights } from '@/modules/collection/service';
 import { CollectionHighlights } from '@/modules/collection/components/collection-highlights';
 import { FriendsActivity } from '@/modules/collection/components/friends-activity';
 import { RandomSpotlight } from '@/modules/collection/components/random-spotlight';
 import { requestCollectionStatisticsRefresh } from '@/modules/sync/service';
 import { ViewingAsBanner } from '@/modules/sharing/components/viewing-as-banner';
 
-/**
- * Accueil (§7.1 `/`).
- *
- * Un utilisateur connecté arrive sur trois portes d'entrée plutôt que directement sur la
- * grille (ADR-0006) : l'objectif est de réduire la distance entre l'envie d'écouter et la
- * lecture. Un visiteur non connecté voit la page publique.
- */
+/** Accueil : découvertes, actualités des amis et tops personnels. */
 export default async function HomePage() {
   const user = await getCurrentUser();
 
@@ -43,10 +37,7 @@ export default async function HomePage() {
     );
   }
 
-  const [count, highlights] = await Promise.all([
-    countCollection(user.activeCollectionOwnerId),
-    getCollectionHighlights(user.id),
-  ]);
+  const highlights = await getCollectionHighlights(user.id);
   await requestCollectionStatisticsRefresh(user.id);
 
   return (
@@ -61,27 +52,6 @@ export default async function HomePage() {
         <ViewingAsBanner ownerUsername={user.activeCollectionOwner.username} />
       ) : null}
 
-      <nav className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <HubTile
-          href="/collection"
-          icon="▦"
-          label={t('home.hub.collection')}
-          hint={t('home.hub.collection.hint', { count })}
-        />
-        <HubTile
-          href="/aleatoire"
-          icon="⤫"
-          label={t('home.hub.random')}
-          hint={t('home.hub.random.hint')}
-        />
-        <HubTile
-          href="/radio"
-          icon="◎"
-          label={t('home.hub.radio')}
-          hint={t('home.hub.radio.hint')}
-        />
-      </nav>
-
       <div className="grid items-start gap-10 border-t border-border pt-8 md:grid-cols-[minmax(0,1fr)_minmax(0,0.65fr)]">
         <FriendsActivity userId={user.id} activeOwnerId={user.activeCollectionOwnerId} />
         <RandomSpotlight
@@ -95,63 +65,6 @@ export default async function HomePage() {
         initial={highlights}
         viewingFriend={user.activeCollectionOwner !== null}
       />
-
-      <Link href="/parametres" className="text-sm underline">
-        {t('nav.settings')}
-      </Link>
     </main>
-  );
-}
-
-/**
- * `next/link`, jamais un `<a>` brut (§SPEC-GAPS G-17) : une ancre classique déclenche une
- * navigation plein document, qui démonte tout le layout racine — le lecteur persistant y
- * compris — avant de tout remonter à vide. Défaut réel constaté en cliquant sur la tuile
- * Radio pendant une lecture en cours : le lecteur disparaissait purement et simplement au
- * lieu de continuer en arrière-plan (2026-09-03).
- */
-function HubTile({
-  href,
-  icon,
-  label,
-  hint,
-  disabledHint,
-}: {
-  href?: string;
-  icon: string;
-  label: string;
-  hint: string;
-  disabledHint?: string;
-}) {
-  const content = (
-    <>
-      <span aria-hidden="true" className="text-3xl">
-        {icon}
-      </span>
-      <span className="text-lg font-medium">{label}</span>
-      <span className="text-sm text-muted">{disabledHint ?? hint}</span>
-    </>
-  );
-
-  const shape =
-    'flex min-h-36 flex-col items-start justify-center gap-1 rounded-lg border border-border p-5';
-
-  if (!href) {
-    return (
-      // Une entrée indisponible reste visible et annoncée comme telle, plutôt que masquée :
-      // l'utilisateur sait ce qui viendra (§20.2, la couleur n'est pas le seul indicateur).
-      <div className={`${shape} opacity-60`} aria-disabled="true">
-        {content}
-      </div>
-    );
-  }
-
-  return (
-    <Link
-      href={href}
-      className={`${shape} focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current`}
-    >
-      {content}
-    </Link>
   );
 }

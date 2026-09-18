@@ -38,7 +38,8 @@ it('affiche le décompte, met à jour la progression à cinq secondes puis arrê
     await vi.advanceTimersByTimeAsync(1000);
   });
   expect(fetchMock).toHaveBeenCalledTimes(1);
-  expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '2');
+  expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  expect(screen.queryByText(/Actualisation terminée/)).not.toBeInTheDocument();
   await act(async () => {
     await vi.advanceTimersByTimeAsync(15_000);
   });
@@ -59,7 +60,7 @@ it('préserve les résultats en cas d’erreur et permet de réessayer', async (
     fireEvent.click(screen.getByRole('button'));
   });
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '2');
+  expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
 });
 
 it('ne chevauche pas les requêtes et les annule au démontage', async () => {
