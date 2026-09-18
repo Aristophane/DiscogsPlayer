@@ -12,11 +12,11 @@ export default async function CratesPage() {
   const records = await getCrateCollection(user.activeCollectionOwnerId);
 
   return (
-    <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 sm:py-9">
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+    <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-3 sm:px-6 sm:py-4">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t('crate.title')}</h1>
-          <p className="mt-2 text-sm text-muted">{t('crate.intro')}</p>
+          <h1 className="text-xl font-semibold tracking-tight">{t('crate.title')}</h1>
+          <p className="sr-only">{t('crate.intro')}</p>
         </div>
         <Link
           href="/collection"

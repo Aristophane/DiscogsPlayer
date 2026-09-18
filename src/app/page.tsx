@@ -11,7 +11,7 @@ import { RandomSpotlight } from '@/modules/collection/components/random-spotligh
 import { requestCollectionStatisticsRefresh } from '@/modules/sync/service';
 import { ViewingAsBanner } from '@/modules/sharing/components/viewing-as-banner';
 
-/** Accueil : découvertes, actualités des amis et tops personnels. */
+/** Accueil : découvertes, actualités des amis et tops de la collection affichée. */
 export default async function HomePage() {
   const user = await getCurrentUser();
 
@@ -37,8 +37,8 @@ export default async function HomePage() {
     );
   }
 
-  const highlights = await getCollectionHighlights(user.id);
-  await requestCollectionStatisticsRefresh(user.id);
+  const highlights = await getCollectionHighlights(user.activeCollectionOwnerId);
+  await requestCollectionStatisticsRefresh(user.activeCollectionOwnerId);
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-12 sm:px-6">
@@ -61,9 +61,9 @@ export default async function HomePage() {
       </div>
 
       <CollectionHighlights
-        key={user.id}
+        key={user.activeCollectionOwnerId}
         initial={highlights}
-        viewingFriend={user.activeCollectionOwner !== null}
+        ownerUsername={user.activeCollectionOwner?.username ?? null}
       />
     </main>
   );

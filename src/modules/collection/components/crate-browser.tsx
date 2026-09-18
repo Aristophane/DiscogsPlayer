@@ -345,7 +345,7 @@ function CrateExplorer({ groups }: { groups: CrateGroup[] }) {
 
         <div className={styles.recordPanel}>
           <div aria-live="polite" aria-atomic="true">
-            <p className={styles.eyebrow}>{t('crate.current')}</p>
+            <p className="sr-only">{t('crate.current')}</p>
             <p className={styles.position}>
               {t('crate.position', { index: index + 1, total: group.items.length })}
             </p>

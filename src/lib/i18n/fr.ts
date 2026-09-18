@@ -213,7 +213,10 @@ export const fr = {
   'statistics.unavailable': 'Donnée indisponible',
   'statistics.updated': 'Discogs · mis à jour le {date}',
   'home.highlights.title': 'Le top de votre collection',
-  'home.highlights.description': 'Vos éditions, vues par la communauté Discogs.',
+  'home.highlights.friendTitle': 'Le top de la collection de {username}',
+  'home.highlights.description':
+    'Les éditions de cette collection, vues par la communauté Discogs.',
+  'home.highlights.friendEmpty': 'Cette collection ne contient pas encore de disques.',
   'home.highlights.wanted': 'Les plus wanted',
   'home.highlights.wanted.hint': 'Les éditions que le plus de membres recherchent.',
   'home.highlights.valuable': 'Les mieux valorisés à la vente',

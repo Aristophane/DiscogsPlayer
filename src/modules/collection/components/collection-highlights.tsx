@@ -15,10 +15,10 @@ const priceFormat = new Intl.NumberFormat('fr-FR', { style: 'currency', currency
 
 export function CollectionHighlights({
   initial,
-  viewingFriend,
+  ownerUsername,
 }: {
   initial: Highlights;
-  viewingFriend: boolean;
+  ownerUsername: string | null;
 }) {
   const [highlights, setHighlights] = useState(initial);
   return (
@@ -28,26 +28,27 @@ export function CollectionHighlights({
     >
       <header>
         <h2 id="collection-highlights" className="text-xl font-semibold tracking-tight">
-          {t('home.highlights.title')}
+          {ownerUsername
+            ? t('home.highlights.friendTitle', { username: ownerUsername })
+            : t('home.highlights.title')}
         </h2>
         <p className="mt-1 text-sm text-muted">{t('home.highlights.description')}</p>
-        {viewingFriend ? (
-          <p className="mt-2 text-sm text-muted">{t('home.highlights.own')}</p>
-        ) : null}
       </header>
       {highlights.total === 0 ? (
         <div className="text-sm text-muted">
-          <p>{t('home.highlights.empty')}</p>
-          <Link href="/import" className="mt-2 inline-block underline">
-            {t('collection.sync')}
-          </Link>
+          <p>{t(ownerUsername ? 'home.highlights.friendEmpty' : 'home.highlights.empty')}</p>
+          {ownerUsername ? null : (
+            <Link href="/import" className="mt-2 inline-block underline">
+              {t('collection.sync')}
+            </Link>
+          )}
         </div>
       ) : (
         <>
           <RefreshStatistics highlights={highlights} onUpdate={setHighlights} />
           <div className="grid gap-10">
-            <Ranking kind="valuable" items={highlights.valuable} switchToOwn={viewingFriend} />
-            <Ranking kind="wanted" items={highlights.wanted} switchToOwn={viewingFriend} />
+            <Ranking kind="valuable" items={highlights.valuable} />
+            <Ranking kind="wanted" items={highlights.wanted} />
           </div>
         </>
       )}
@@ -55,15 +56,7 @@ export function CollectionHighlights({
   );
 }
 
-function Ranking({
-  kind,
-  items,
-  switchToOwn,
-}: {
-  kind: 'wanted' | 'valuable';
-  items: RankedRelease[];
-  switchToOwn: boolean;
-}) {
+function Ranking({ kind, items }: { kind: 'wanted' | 'valuable'; items: RankedRelease[] }) {
   const headingId = `top-${kind}`;
   return (
     <section aria-labelledby={headingId} className="min-w-0">
@@ -82,7 +75,7 @@ function Ranking({
               <div className="min-w-0 flex-1">
                 <PersonalReleaseLink
                   releaseId={item.discogsReleaseId}
-                  switchToOwn={switchToOwn}
+                  switchToOwn={false}
                   layout="cover"
                 >
                   <div className="relative aspect-square w-full overflow-hidden rounded-md bg-surface">

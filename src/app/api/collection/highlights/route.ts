@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   const id = requestId(request.headers);
   try {
     const user = await requireUser();
-    return NextResponse.json(await getCollectionHighlights(user.id), {
+    return NextResponse.json(await getCollectionHighlights(user.activeCollectionOwnerId), {
       headers: { 'cache-control': 'no-store', 'x-request-id': id },
     });
   } catch (cause) {

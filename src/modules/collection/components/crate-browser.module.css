@@ -3,7 +3,10 @@
   --crate-edge: #657065;
   --crate-dark: #252e28;
   border-top: 1px solid var(--border);
-  padding-top: 22px;
+  padding-top: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  column-gap: 12px;
 }
 .toolbar,
 .binbar {
@@ -15,7 +18,7 @@
 }
 .field {
   display: grid;
-  gap: 7px;
+  gap: 4px;
   min-width: 0;
   max-width: 100%;
 }
@@ -35,44 +38,44 @@
   font-weight: 500;
 }
 .summary {
-  font-size: 12px;
-  color: var(--muted);
-  padding-bottom: 12px;
+  display: none;
 }
 .groupingHint {
-  min-height: 32px;
-  margin-top: 10px;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  margin-top: 8px;
   font-size: 12px;
   color: var(--muted);
 }
 .binbar {
-  margin-top: 12px;
+  grid-column: 2;
+  grid-row: 1;
 }
 .binbar .field {
   flex: 1;
-  max-width: 300px;
 }
 .binNumber {
-  font-size: 24px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -1px;
-  padding-bottom: 4px;
+  display: none;
 }
-.binNumber span {
-  font-size: 13px;
-  color: var(--muted);
-  letter-spacing: 0;
+.toolbar {
+  grid-column: 1;
+  grid-row: 1;
+  align-items: stretch;
+}
+.toolbar .field {
+  width: 100%;
 }
 .experience {
   min-width: 0;
+  grid-column: 1 / -1;
 }
 .sceneColumn {
   min-width: 0;
 }
 .scene {
-  --sleeve-size: min(58vw, 310px);
+  --sleeve-size: min(66vw, 440px);
   position: relative;
-  height: calc(var(--sleeve-size) + 165px);
+  height: calc(var(--sleeve-size) + 140px);
   margin: 4px -16px 0;
   overflow: clip;
   perspective: 1000px;
@@ -276,44 +279,37 @@
   color: var(--muted);
 }
 .recordPanel {
-  padding: 24px 0 12px;
-}
-.eyebrow {
-  color: var(--muted);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 1.7px;
+  padding: 16px 0 8px;
 }
 .position {
-  margin-top: 12px;
   font-variant-numeric: tabular-nums;
   font-size: 13px;
   color: var(--muted);
 }
 .recordTitle {
-  margin-top: 8px;
-  font-size: clamp(24px, 3vw, 36px);
+  margin-top: 4px;
+  font-size: clamp(20px, 2vw, 26px);
   font-weight: 600;
   line-height: 1.16;
-  letter-spacing: -0.8px;
+  letter-spacing: -0.5px;
   overflow-wrap: anywhere;
 }
 .artist {
-  margin-top: 10px;
-  font-size: 16px;
+  margin-top: 4px;
+  font-size: 14px;
   overflow-wrap: anywhere;
 }
 .metadata {
   min-height: 20px;
-  margin-top: 6px;
+  margin-top: 4px;
   font-size: 12px;
   color: var(--muted);
 }
 .controls {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-top: 25px;
+  gap: 12px;
+  margin-top: 12px;
 }
 .controls button {
   display: grid;
@@ -341,8 +337,9 @@
   justify-content: space-between;
   gap: 20px;
   border-top: 1px solid var(--border);
-  padding: 18px 0;
-  margin-top: 20px;
+  min-height: 44px;
+  padding: 10px 0;
+  margin-top: 8px;
   font-size: 14px;
   font-weight: 500;
 }
@@ -369,62 +366,55 @@
   }
 }
 @media (min-width: 768px) {
-  .experience {
-    display: grid;
-    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
-    align-items: center;
-    gap: 38px;
+  .browser {
+    grid-template-columns: 180px minmax(0, 1fr);
+    column-gap: 16px;
+  }
+  .binbar .field {
+    max-width: 300px;
   }
   .scene {
-    --sleeve-size: clamp(250px, 32vw, 350px);
-    height: calc(var(--sleeve-size) + 190px);
-    margin: 8px -15px 0;
+    --sleeve-size: clamp(360px, 40vw, 460px);
+    margin: 0;
   }
   .recordPanel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 240px) 120px;
+    align-items: center;
+    column-gap: 28px;
+  }
+  .controls,
+  .details {
+    margin-top: 0;
+  }
+  .details {
+    border-top: 0;
+  }
+}
+@media (min-width: 1024px) {
+  .experience {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 24px;
+  }
+  .recordPanel {
+    display: block;
     padding-right: 12px;
   }
-  .binbar {
-    margin-top: 18px;
+  .controls {
+    margin-top: 16px;
+  }
+  .details {
+    margin-top: 8px;
+    border-top: 1px solid var(--border);
   }
 }
 @media (max-width: 767px) {
-  .browser {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
-    column-gap: 12px;
-  }
-  .toolbar {
-    grid-column: 1;
-    grid-row: 1;
-    align-items: stretch;
-  }
-  .toolbar .field {
-    width: 100%;
-  }
-  .binbar {
-    grid-column: 2;
-    grid-row: 1;
-    margin-top: 0;
-  }
-  .binbar .field {
-    max-width: none;
-  }
   .field select {
     width: 100%;
     padding-right: 20px;
     padding-left: 9px;
-  }
-  .summary,
-  .binNumber {
-    display: none;
-  }
-  .groupingHint {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    margin-top: 12px;
-  }
-  .experience {
-    grid-column: 1 / -1;
   }
 }
 @media (prefers-color-scheme: dark) {

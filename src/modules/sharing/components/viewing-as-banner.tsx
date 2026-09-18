@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 
 import { t } from '@/lib/i18n';
 
@@ -13,24 +13,30 @@ import { t } from '@/lib/i18n';
  */
 export function ViewingAsBanner({ ownerUsername }: { ownerUsername: string }) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const [busy, startTransition] = useTransition();
+  const [error, setError] = useState(false);
 
-  async function backToOwn() {
-    setBusy(true);
-    try {
-      const response = await fetch('/api/collection-shares/active', {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ownerId: null }),
-      });
-      if (response.ok) {
-        router.refresh();
-        return;
+  function backToOwn() {
+    setError(false);
+    startTransition(async () => {
+      try {
+        const response = await fetch('/api/collection-shares/active', {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ownerId: null }),
+        });
+        if (response.ok) {
+          // A friend's record may not belong to the user's own collection.
+          // Leave its detail before refreshing the collection context.
+          router.push('/collection');
+          router.refresh();
+          return;
+        }
+        setError(true);
+      } catch {
+        setError(true);
       }
-    } catch {
-      // Repli silencieux : le bandeau reste affiché, l'utilisateur peut réessayer.
-    }
-    setBusy(false);
+    });
   }
 
   return (
@@ -44,6 +50,11 @@ export function ViewingAsBanner({ ownerUsername }: { ownerUsername: string }) {
       >
         {busy ? t('collection.viewingAs.switching') : t('collection.viewingAs.back')}
       </button>
+      {error ? (
+        <p role="alert" className="w-full text-sm">
+          {t('sharing.error')}
+        </p>
+      ) : null}
     </div>
   );
 }

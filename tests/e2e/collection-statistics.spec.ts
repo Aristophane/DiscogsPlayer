@@ -40,8 +40,9 @@ test.beforeAll(async () => {
 
 test.beforeEach(async ({ page }) => {
   await sql`update sessions set viewing_as_user_id = null where user_id = ${ownerId}`;
-  await sql`update collection_instances set is_active = true where user_id = ${ownerId}`;
+  await sql`update collection_instances set is_active = true where user_id in (${ownerId}, ${friendId})`;
   await sql`update discogs_releases set statistics_fetched_at = now(), community_want = 0, lowest_price_eur = 25.5 where discogs_release_id = ${R(1)}`;
+  await sql`update discogs_releases set statistics_fetched_at = now(), community_want = 700, lowest_price_eur = 178.5 where discogs_release_id = ${R(7)}`;
   await sql`update collection_shares set revoked_at = null where owner_id = ${friendId} and grantee_id = ${ownerId}`;
   await page
     .context()
@@ -84,9 +85,10 @@ test('les tops personnels sont classés, accessibles et sans débordement', asyn
   ).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('home-statistics.png'), fullPage: true });
   await wanted.getByRole('link').first().click();
+  await expect(page).toHaveURL(new RegExp(`/sorties/${R(6)}$`));
   await expect(page.getByRole('heading', { name: 'Édition 6', exact: true })).toBeVisible();
-  await expect(page.getByText('En collection', { exact: true })).toBeVisible();
-  await expect(page.getByText('En wantlist', { exact: true })).toBeVisible();
+  await expect(page.getByRole('main').getByText('En collection', { exact: true })).toBeVisible();
+  await expect(page.getByRole('main').getByText('En wantlist', { exact: true })).toBeVisible();
 });
 
 test('les classements et la barre progressent automatiquement toutes les cinq secondes', async ({
@@ -171,16 +173,100 @@ test('les compteurs figurent sur chaque album, avec zéro distinct d’inconnu',
   await expect(album.locator('dd').last()).toHaveText('0');
 });
 
-test('les tops restent personnels chez un ami et ouvrent la bonne édition', async ({ page }) => {
-  await sql`update sessions set viewing_as_user_id = ${friendId} where user_id = ${ownerId}`;
+test('les tops suivent le choix de collection et ouvrent les disques de cet ami', async ({
+  page,
+}) => {
   await page.goto('/');
+  const switcher = page.getByRole('combobox', { name: 'Collection affichée' });
+  await switcher.selectOption(friendId);
   await expect(page.getByText('Vous consultez la collection de stats_friend.')).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Le top de la collection de stats_friend' }),
+  ).toBeVisible();
   const wanted = page.getByRole('region', { name: 'Les plus wanted', exact: true });
+  await expect(wanted.getByRole('listitem')).toHaveCount(5);
+  await expect(wanted.getByRole('listitem').first()).toContainText('Édition 13');
+  await expect(
+    page
+      .getByRole('region', { name: 'Les mieux valorisés à la vente', exact: true })
+      .getByRole('listitem')
+      .first(),
+  ).toContainText('331,50');
+  await wanted.getByRole('link').first().click();
+  await expect(page.getByRole('heading', { name: 'Édition 13', exact: true })).toBeVisible();
+  await expect(switcher).toHaveValue(friendId);
+  await page.getByRole('link', { name: 'Retour à la collection', exact: true }).click();
+  await expect(page).toHaveURL(/\/collection$/);
+  await expect(switcher).toHaveValue(friendId);
+  await page.getByRole('banner').getByRole('link', { name: 'Dig', exact: true }).click();
+  await switcher.selectOption(ownerId);
+  await expect(
+    page.getByRole('heading', { name: 'Le top de votre collection', exact: true }),
+  ).toBeVisible();
   await expect(wanted.getByRole('listitem').first()).toContainText('Édition 6');
-  await expect(wanted.getByText('Album de mon ami')).toHaveCount(0);
-  await wanted.getByRole('button').first().click();
-  await expect(page.getByRole('heading', { name: 'Édition 6', exact: true })).toBeVisible();
-  await expect(page.getByText('Vous consultez la collection de stats_friend.')).toHaveCount(0);
+});
+
+test('revenir à ma collection depuis un disque exclusif à un ami ouvre la liste sans erreur 404', async ({
+  page,
+}) => {
+  await sql`update sessions set viewing_as_user_id = ${friendId} where user_id = ${ownerId}`;
+  await page.goto(`/sorties/${R(7)}`);
+  await expect(page.getByRole('heading', { name: 'Album de mon ami', exact: true })).toBeVisible();
+  await page.route('**/api/collection-shares/active', (route) =>
+    route.fulfill({ status: 500, body: '{}' }),
+  );
+  const back = page.getByRole('button', { name: 'Revenir à ma collection', exact: true });
+  await back.click();
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('Une erreur est survenue');
+  await expect(back).toBeEnabled();
+  await expect(page).toHaveURL(new RegExp(`/sorties/${R(7)}$`));
+  await page.unroute('**/api/collection-shares/active');
+  await back.click();
+  await expect(page).toHaveURL(/\/collection$/);
+  await expect(page.getByRole('combobox', { name: 'Collection affichée' })).toHaveValue(ownerId);
+  await expect(page.getByRole('main').getByRole('listitem')).toHaveCount(6);
+  await expect(page.getByRole('link', { name: /Édition 1/ })).toBeVisible();
+});
+
+test('les tops amis se rafraîchissent et leur API respecte la révocation du partage', async ({
+  page,
+}) => {
+  await sql`update sessions set viewing_as_user_id = ${friendId} where user_id = ${ownerId}`;
+  await sql`update discogs_releases set statistics_fetched_at = now() - interval '25 hours' where discogs_release_id = ${R(7)}`;
+  await page.goto('/');
+  const progress = page.getByRole('progressbar');
+  await expect(progress).toHaveAttribute('aria-valuemax', '7');
+  await expect(progress).toHaveAttribute('aria-valuenow', '6');
+  expect(
+    (await (await page.request.get(`/api/collection/highlights?userId=${ownerId}`)).json()).total,
+  ).toBe(7);
+  await sql`update discogs_releases set statistics_fetched_at = now(), community_want = 9999, lowest_price_eur = 9999 where discogs_release_id = ${R(7)}`;
+  await expect(progress).toHaveCount(0, { timeout: 12_000 });
+  for (const title of ['Les plus wanted', 'Les mieux valorisés à la vente']) {
+    await expect(
+      page.getByRole('region', { name: title, exact: true }).getByRole('listitem').first(),
+    ).toContainText('Album de mon ami');
+  }
+  await sql`update collection_shares set revoked_at = now() where owner_id = ${friendId} and grantee_id = ${ownerId}`;
+  expect((await (await page.request.get('/api/collection/highlights')).json()).total).toBe(6);
+  await page.reload();
+  await expect(
+    page.getByRole('heading', { name: 'Le top de votre collection', exact: true }),
+  ).toBeVisible();
+});
+
+test('les tops d’une collection amie vide ne proposent pas d’import personnel', async ({
+  page,
+}) => {
+  await sql`update sessions set viewing_as_user_id = ${friendId} where user_id = ${ownerId}`;
+  await sql`update collection_instances set is_active = false where user_id = ${friendId}`;
+  await page.goto('/');
+  const highlights = page.getByRole('region', {
+    name: 'Le top de la collection de stats_friend',
+    exact: true,
+  });
+  await expect(highlights).toContainText('Cette collection ne contient pas encore de disques.');
+  await expect(highlights.getByRole('link', { name: 'Synchroniser' })).toHaveCount(0);
 });
 
 test('une collection vide explique comment obtenir les tops', async ({ page }) => {
