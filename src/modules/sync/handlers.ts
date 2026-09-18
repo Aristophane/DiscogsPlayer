@@ -8,6 +8,16 @@ import { z } from 'zod';
 
 import { moduleLogger } from '@/lib/logger';
 import {
+  artistOriginApi,
+  ArtistOriginError,
+  type ArtistOriginApi,
+} from '@/modules/providers/wikidata/artist-origin';
+import {
+  artistOriginIsFresh,
+  saveArtistOrigin,
+  postponeArtistOrigin,
+} from '@/modules/catalog/artist-origin-service';
+import {
   applyReleaseDetails,
   applyReleaseStatistics,
   releaseStatisticsAreFresh,
@@ -43,6 +53,13 @@ export type TaskError = {
 
 /** Traduit n'importe quelle exception en erreur de tâche exploitable et sans secret. */
 export function toTaskError(error: unknown): TaskError {
+  if (error instanceof ArtistOriginError)
+    return {
+      code: 'ARTIST_ORIGIN_UNAVAILABLE',
+      message: 'Origine de l’artiste indisponible',
+      retryable: error.retryable,
+      retryAfterMs: error.retryAfterMs,
+    };
   if (error instanceof DiscogsApiError) {
     return {
       code: error.code,
@@ -73,8 +90,28 @@ export function toTaskError(error: unknown): TaskError {
  * Exécute une tâche. Lève en cas d'échec : c'est l'appelant (le worker) qui décide de
  * reprogrammer ou d'abandonner, en fonction des tentatives restantes.
  */
-export async function runTask(task: TaskRow, api: DiscogsApi = liveDiscogsApi): Promise<void> {
+export async function runTask(
+  task: TaskRow,
+  api: DiscogsApi = liveDiscogsApi,
+  origins: ArtistOriginApi = artistOriginApi,
+): Promise<void> {
   switch (task.type) {
+    case 'catalog.fetch_artist_origin': {
+      const { discogsArtistId } = z
+        .object({ discogsArtistId: z.string().regex(/^[1-9]\d*$/) })
+        .parse(task.payload);
+      if (await artistOriginIsFresh(discogsArtistId)) return;
+      try {
+        await saveArtistOrigin(discogsArtistId, await origins.lookup(discogsArtistId));
+      } catch (error) {
+        await postponeArtistOrigin(
+          discogsArtistId,
+          error instanceof ArtistOriginError ? error.retryAfterMs : 60_000,
+        );
+        throw error;
+      }
+      return;
+    }
     case TASK_SYNC_COLLECTION: {
       const payload = syncCollectionPayload.parse(task.payload);
 

@@ -91,6 +91,14 @@ export const discogsArtists = pgTable(
     name: text('name').notNull(),
     /** Sans accent ni casse : COLL-003 exige que « Bjork » trouve « Björk ». */
     nameNormalized: text('name_normalized').notNull(),
+    /** Artist origin only; never copied from a release's commercial territory. */
+    originCountries: text('origin_countries')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    originSourceUrl: text('origin_source_url'),
+    originCheckedAt: timestamp('origin_checked_at', { withTimezone: true }),
+    originNextCheckAt: timestamp('origin_next_check_at', { withTimezone: true }),
   },
   (table) => [
     uniqueIndex('discogs_artists_discogs_artist_id_key')

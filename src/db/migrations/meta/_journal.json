@@ -78,6 +78,13 @@
       "when": 1789749711808,
       "tag": "0010_living_anthem",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1789764927822,
+      "tag": "0011_artist_origins",
+      "breakpoints": true
     }
   ]
 }

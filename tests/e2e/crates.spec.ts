@@ -6,6 +6,7 @@ import postgres from 'postgres';
 const sql = postgres(process.env.DATABASE_URL ?? '', { max: 2 });
 const identities = ['test-crates-owner', 'test-crates-friend'];
 const releaseId = (n: number) => `test-crates-release-${n}`;
+const artistId = (n: number) => `test-crates-artist-${n}`;
 const editions = [
   { title: 'Aube Jazz', genres: ['Jazz', 'Blues'], year: 1998, country: 'France' },
   { title: 'Bleu Minuit', genres: ['Jazz'], year: 1998, country: 'Italy' },
@@ -24,6 +25,7 @@ async function cleanup() {
   await sql`delete from tasks where dedupe_key like 'discogs.fetch_statistics:test-crates-release-%'`;
   await sql`delete from users where discogs_user_id in ${sql(identities)}`;
   await sql`delete from discogs_releases where discogs_release_id in ${sql(editions.map((_, index) => releaseId(index + 1)))}`;
+  await sql`delete from discogs_artists where discogs_artist_id in ${sql(editions.map((_, index) => artistId(index + 1)))}`;
 }
 
 async function chooseCrate(page: Page, label: RegExp) {
@@ -78,6 +80,11 @@ test.beforeAll(async () => {
       values (${releaseId(number)}, ${edition.title}, 'Atelier Quartet', ${edition.title.toLowerCase()},
         'atelier quartet', ${edition.genres}, ${edition.year}, ${edition.country},
         ${number === 6 ? null : `https://i.discogs.com/test-crates-${number}.jpg`}, now(), now()) returning id`;
+    const origins = number === 1 ? ['Senegal'] : edition.country ? [edition.country] : [];
+    const [artist] =
+      await sql`insert into discogs_artists (discogs_artist_id, name, name_normalized, origin_countries, origin_source_url, origin_checked_at, origin_next_check_at)
+      values (${artistId(number)}, 'Atelier Quartet', 'atelier quartet', ${origins}, ${origins.length ? 'https://www.wikidata.org/wiki/Q1' : null}, now(), now() + interval '30 days') returning id`;
+    await sql`insert into discogs_release_artists (release_id, artist_id, position) values (${release!.id}, ${artist!.id}, 0)`;
     await sql`insert into collection_instances (user_id, release_id, discogs_instance_id, date_added, is_active)
       values (${number === 7 ? friendId : ownerId}, ${release!.id}, ${`test-crates-instance-${number}`},
         ${new Date(Date.UTC(2026, 0, number))}, ${number !== 8})`;
@@ -121,7 +128,7 @@ test.afterAll(async () => {
 
 test('le header ouvre des bacs par genre, année ou continent sans doubler les exemplaires', async ({
   page,
-}) => {
+}, testInfo) => {
   await page.goto('/');
   const header = page.getByRole('banner');
   const menu = header.getByRole('button', { name: 'Ouvrir le menu' });
@@ -142,14 +149,33 @@ test('le header ouvre des bacs par genre, année ou continent sans doubler les e
   await expect(position).toHaveAttribute('max', '2');
   await grouping.selectOption('continent');
   await chooseCrate(page, /Europe/);
-  await expect(position).toHaveAttribute('max', '3');
-  await chooseCrate(page, /Pays non renseigné/);
+  await expect(position).toHaveAttribute('max', '2');
+  await chooseCrate(page, /Afrique/);
+  await expect(page.getByRole('heading', { name: 'Aube Jazz', exact: true })).toBeVisible();
+  await expect(page.getByText('Origine : Senegal')).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Source de l’origine de l’artiste 1 sur Wikidata' }),
+  ).toHaveAttribute('href', 'https://www.wikidata.org/wiki/Q1');
+  await page.screenshot({ path: testInfo.outputPath('artist-origins.png'), fullPage: true });
+  await chooseCrate(page, /Origine inconnue/);
   await expect(position).toHaveAttribute('max', '1');
   await expect(
     page.getByRole('button', { name: 'Ouvrir Disque sans métadonnées', exact: true }),
   ).toBeVisible();
   await expect(page.getByText('Disque retiré', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Solo Atlantique', { exact: true })).toHaveCount(0);
+  // A completed background enrichment becomes visible without reimporting the collection.
+  await sql`update discogs_artists set origin_countries = ARRAY['Senegal'], origin_source_url = 'https://www.wikidata.org/wiki/Q2' where discogs_artist_id = ${artistId(6)}`;
+  await page.getByRole('button', { name: 'Actualiser les bacs', exact: true }).click();
+  await expect(
+    page
+      .getByRole('combobox', { name: 'Choisir un bac', exact: true })
+      .locator('option')
+      .filter({ hasText: /Origine inconnue/ }),
+  ).toHaveCount(0);
+  await chooseCrate(page, /Afrique/);
+  await expect(position).toHaveAttribute('max', '2');
+  await sql`update discogs_artists set origin_countries = ARRAY[]::text[], origin_source_url = null where discogs_artist_id = ${artistId(6)}`;
 });
 
 test('le scroll, le clavier et les boutons traversent les bacs dans les limites de la collection', async ({

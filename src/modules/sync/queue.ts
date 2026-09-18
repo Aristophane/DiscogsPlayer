@@ -32,12 +32,16 @@ export type EnqueueOptions = {
 };
 
 /** Enfile un lot sans avancer les reprises après un 429 déjà programmées. */
-export async function enqueueBackgroundBatch(type: string, releaseIds: string[]): Promise<void> {
+export async function enqueueBackgroundBatch(
+  type: string,
+  releaseIds: string[],
+  payloadKey = 'discogsReleaseId',
+): Promise<void> {
   const unique = [...new Set(releaseIds)];
   for (let offset = 0; offset < unique.length; offset += 500) {
     const values = unique.slice(offset, offset + 500).map(
       (discogsReleaseId) => sql`(
-      ${type}, ${JSON.stringify({ discogsReleaseId })}::jsonb, ${`${type}:${discogsReleaseId}`}, -10
+      ${type}, ${JSON.stringify({ [payloadKey]: discogsReleaseId })}::jsonb, ${`${type}:${discogsReleaseId}`}, -10
     )`,
     );
     await db.execute(sql`insert into ${tasks} (type, payload, dedupe_key, priority)

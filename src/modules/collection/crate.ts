@@ -11,6 +11,8 @@ export type CrateRecord = {
   year: number | null;
   genres: string[];
   country: string | null;
+  originCountries: string[] | null;
+  originSourceUrls: string[];
   coverUrl: string | null;
 };
 
@@ -37,7 +39,13 @@ function recordGroup(record: CrateRecord, grouping: CrateGrouping) {
       : { key: 'unknown', label: t('crate.unknownYear') };
   }
   if (grouping === 'continent') {
-    const continent = countryToContinent(record.country);
+    const continents = record.originCountries?.map(countryToContinent) ?? [];
+    const continent =
+      !continents.length || continents.includes('unknown')
+        ? 'unknown'
+        : new Set(continents).size > 1
+          ? 'international'
+          : continents[0]!;
     return { key: continent, label: t(CONTINENT_LABELS[continent]) };
   }
   const genre = record.genres.find((value) => value.trim() !== '')?.trim();

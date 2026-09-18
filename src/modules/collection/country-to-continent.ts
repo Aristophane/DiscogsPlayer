@@ -12,7 +12,8 @@ export type CrateContinent =
   | 'unknown';
 
 /**
- * Geography of the edition's release territory, never the artist's origin.
+ * Geography of country names. The caller supplies documented artist origins for crates;
+ * this conversion does not infer an artist's origin from a release territory.
  * Country assignments follow UN M49 (consulted 2026-09-18):
  * https://unstats.un.org/unsd/methodology/m49/
  * North America combines Northern America, Central America and the Caribbean.

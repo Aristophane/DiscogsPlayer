@@ -91,6 +91,8 @@ describe('collection des bacs', () => {
       genres: ['Rock'],
       year: 1990,
       country: 'France',
+      originCountries: null,
+      originSourceUrls: [],
       coverUrl: 'https://i.discogs.com/test.jpg',
     });
     expect(await getCrateCollection(ownerId)).toEqual(records);

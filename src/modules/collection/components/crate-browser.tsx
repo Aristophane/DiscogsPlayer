@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useTransition,
   type CSSProperties,
   type KeyboardEvent,
   type PointerEvent,
@@ -21,6 +22,8 @@ const GROUPINGS: CrateGrouping[] = ['genre', 'year', 'continent'];
 const clamp = (value: number, max: number) => Math.max(0, Math.min(value, max));
 
 export function CrateBrowser({ records }: { records: CrateRecord[] }) {
+  const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
   const [grouping, setGrouping] = useState<CrateGrouping>('genre');
   const groups = useMemo(() => groupCrateRecords(records, grouping), [records, grouping]);
 
@@ -49,14 +52,38 @@ export function CrateBrowser({ records }: { records: CrateRecord[] }) {
           {t('crate.bins', { count: groups.length })}
         </p>
       </div>
-      <p className={styles.groupingHint}>{t(`crate.${grouping}Hint`)}</p>
-      <CrateExplorer key={grouping} groups={groups} />
+      <div className={styles.groupingHint}>
+        <p>{t(`crate.${grouping}Hint`)}</p>
+        {grouping === 'continent' ? (
+          <div className="flex flex-wrap items-center gap-x-3">
+            <span>
+              {t('crate.originCoverage', {
+                known: records.filter((record) => record.originCountries?.length).length,
+                total: records.length,
+              })}
+            </span>
+            <button
+              type="button"
+              className="min-h-11 underline disabled:opacity-50"
+              disabled={refreshing}
+              onClick={() => startRefresh(() => router.refresh())}
+            >
+              {t(refreshing ? 'collection.loading' : 'crate.refreshOrigins')}
+            </button>
+          </div>
+        ) : null}
+      </div>
+      <CrateExplorer
+        key={`${grouping}:${groups.map((group) => `${group.id}:${group.items.map((item) => item.releaseId).join(',')}`).join(';')}`}
+        groups={groups}
+        grouping={grouping}
+      />
     </div>
   );
 }
 
 /** Only nearby sleeves are mounted: the size of the collection does not change the 3D scene cost. */
-function CrateExplorer({ groups }: { groups: CrateGroup[] }) {
+function CrateExplorer({ groups, grouping }: { groups: CrateGroup[]; grouping: CrateGrouping }) {
   const router = useRouter();
   const flattened = useMemo(
     () => groups.flatMap((group) => group.items.map((record, index) => ({ record, group, index }))),
@@ -352,8 +379,33 @@ function CrateExplorer({ groups }: { groups: CrateGroup[] }) {
             <h2 className={styles.recordTitle}>{record.title}</h2>
             <p className={styles.artist}>{record.artists}</p>
             <p className={styles.metadata}>
-              {[record.year, record.country].filter(Boolean).join(' · ')}
+              {[record.year, grouping === 'continent' ? null : record.country]
+                .filter(Boolean)
+                .join(' · ')}
             </p>
+            {grouping === 'continent' ? (
+              <p className={styles.metadata}>
+                {t('crate.artistOrigin', {
+                  countries: record.originCountries?.length
+                    ? record.originCountries.join(', ')
+                    : t('crate.continent.unknown'),
+                })}
+                {record.originCountries?.length
+                  ? record.originSourceUrls.map((url, index) => (
+                      <a
+                        key={url}
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="ml-2 inline-flex min-h-11 items-center underline"
+                        aria-label={t('crate.originSource', { index: index + 1 })}
+                      >
+                        Wikidata{record.originSourceUrls.length > 1 ? ` ${index + 1}` : ''}
+                      </a>
+                    ))
+                  : null}
+              </p>
+            ) : null}
           </div>
           <div className={styles.controls}>
             <button

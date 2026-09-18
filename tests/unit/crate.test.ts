@@ -13,6 +13,8 @@ function record(id: string, extra: Partial<CrateRecord> = {}): CrateRecord {
     year: null,
     genres: [],
     country: null,
+    originCountries: null,
+    originSourceUrls: [],
     coverUrl: null,
     ...extra,
   };
@@ -57,26 +59,27 @@ describe('bacs de la collection', () => {
     expect(groups[2]?.items.map((item) => item.releaseId)).toEqual(['c', 'd', 'e']);
   });
 
-  it('classe par territoire d’édition et garde les éditions internationales et inconnues', () => {
+  it('classe par origine des artistes, indépendamment du marché de l’édition', () => {
     const groups = groupCrateRecords(
       [
-        record('a', { country: 'France' }),
-        record('b', { country: 'US & Europe' }),
-        record('c', { country: 'Japan' }),
-        record('d'),
-        record('e', { country: 'Unknown' }),
-        record('f', { country: 'UK & Europe' }),
+        record('a', { country: 'France', originCountries: ['Senegal'] }),
+        record('b', { country: 'France', originCountries: ['US', 'Senegal'] }),
+        record('c', { country: 'France', originCountries: ['Japan'] }),
+        record('d', { country: 'France' }),
+        record('e', { country: 'US', originCountries: ['Unknown'] }),
+        record('f', { country: 'Japan', originCountries: ['Senegal', 'Mali'] }),
       ],
       'continent',
     );
     expect(groups.map((group) => group.label)).toEqual([
+      t('crate.continent.africa'),
       t('crate.continent.asia'),
-      t('crate.continent.europe'),
       t('crate.continent.international'),
       t('crate.continent.unknown'),
     ]);
-    expect(groups[1]?.items.map((item) => item.releaseId)).toEqual(['a', 'f']);
-    expect(groups[3]?.items.map((item) => item.releaseId)).toEqual(['d', 'e']);
+    expect(groups[0]?.items.map((item) => item.releaseId)).toEqual(['a', 'f']);
+    expect(groups.at(-1)?.id).toBe('continent:unknown');
+    expect(groups.at(-1)?.items.map((item) => item.releaseId)).toEqual(['d', 'e']);
   });
 
   it('ne duplique pas une édition physique et ne crée pas de bac vide', () => {

@@ -31,7 +31,11 @@ export const fr = {
   'crate.choose': 'Choisir un bac',
   'crate.genreHint': 'Chaque disque est rangé sous son premier genre Discogs.',
   'crate.continentHint':
-    'Le continent correspond au pays de l’édition, pas à l’origine de l’artiste.',
+    'Origine des artistes : pays d’origine documenté, de formation du groupe ou de naissance. Les origines manquantes sont recherchées en arrière-plan.',
+  'crate.originCoverage': '{known} disque(s) avec une origine sur {total}',
+  'crate.refreshOrigins': 'Actualiser les bacs',
+  'crate.artistOrigin': 'Origine : {countries}',
+  'crate.originSource': 'Source de l’origine de l’artiste {index} sur Wikidata',
   'crate.yearHint': 'L’année est celle de l’édition présente dans votre collection.',
   'crate.scene': 'Bac à vinyle 3D',
   'crate.gesture': 'Faites défiler ou glissez les pochettes pour fouiller le bac.',
@@ -59,8 +63,8 @@ export const fr = {
   'crate.continent.southAmerica': 'Amérique du Sud',
   'crate.continent.oceania': 'Océanie',
   'crate.continent.antarctica': 'Antarctique',
-  'crate.continent.international': 'International',
-  'crate.continent.unknown': 'Pays non renseigné',
+  'crate.continent.international': 'Plusieurs continents',
+  'crate.continent.unknown': 'Origine inconnue',
 
   // Connexion (§6.1, §19.3 : la transparence est affichée avant l'autorisation)
   'signin.title': 'Se connecter',

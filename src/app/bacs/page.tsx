@@ -5,11 +5,13 @@ import { getCurrentUser } from '@/modules/auth/current-user';
 import { getCrateCollection } from '@/modules/collection/crate-service';
 import { CrateBrowser } from '@/modules/collection/components/crate-browser';
 import { ViewingAsBanner } from '@/modules/sharing/components/viewing-as-banner';
+import { requestCollectionArtistOrigins } from '@/modules/sync/artist-origins';
 
 export default async function CratesPage() {
   const user = await getCurrentUser();
   if (!user) redirect('/connexion');
   const records = await getCrateCollection(user.activeCollectionOwnerId);
+  await requestCollectionArtistOrigins(user.activeCollectionOwnerId);
 
   return (
     <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-3 sm:px-6 sm:py-4">
