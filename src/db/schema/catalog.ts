@@ -9,6 +9,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   text,
@@ -60,6 +61,12 @@ export const discogsReleases = pgTable(
     rawSourceUpdatedAt: timestamp('raw_source_updated_at', { withTimezone: true }),
     /** `null` tant que seul le résumé de collection a été vu ; pilote la fraîcheur. */
     detailsFetchedAt: timestamp('details_fetched_at', { withTimezone: true }),
+    communityHave: integer('community_have'),
+    communityWant: integer('community_want'),
+    /** Prix minimum d'annonce, en EUR ; ce n'est pas un historique de ventes. */
+    lowestPriceEur: numeric('lowest_price_eur', { precision: 14, scale: 2 }),
+    numForSale: integer('num_for_sale'),
+    statisticsFetchedAt: timestamp('statistics_fetched_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

@@ -156,7 +156,7 @@ async function cleanup() {
   await db.delete(tasks).where(
     inArray(
       tasks.dedupeKey,
-      ALL_TEST_RELEASE_IDS.map((id) => `release:${id}`),
+      ALL_TEST_RELEASE_IDS.flatMap((id) => [`release:${id}`, `discogs.fetch_statistics:${id}`]),
     ),
   );
 }

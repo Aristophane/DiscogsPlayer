@@ -11,6 +11,7 @@ import { and, arrayOverlaps, eq, sql, type SQL } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { collectionInstances, discogsReleases } from '@/db/schema';
 import { normalizeText } from '@/modules/catalog/normalize';
+import { STATISTICS_FRESHNESS_MS } from '@/modules/catalog/service';
 
 import { DEFAULT_SORT, decodeCursor, encodeCursor, type Cursor, type SortOption } from './cursor';
 
@@ -25,6 +26,8 @@ export type CollectionItem = {
   genres: string[];
   styles: string[];
   coverUrl: string | null;
+  communityHave: number | null;
+  communityWant: number | null;
   /** Nombre d'exemplaires possédés (COLL-006), sans effet sur le tirage aléatoire. */
   instanceCount: number;
 };
@@ -153,6 +156,8 @@ export async function listCollection(
       genres: discogsReleases.genres,
       styles: discogsReleases.styles,
       coverUrl: discogsReleases.primaryImageUrl,
+      communityHave: discogsReleases.communityHave,
+      communityWant: discogsReleases.communityWant,
       instanceCount: sql<string>`count(*)::text`,
       sortKey: expression,
     })
@@ -178,6 +183,8 @@ export async function listCollection(
     genres: row.genres,
     styles: row.styles,
     coverUrl: row.coverUrl,
+    communityHave: row.communityHave,
+    communityWant: row.communityWant,
     instanceCount: Number(row.instanceCount),
   }));
 
@@ -222,6 +229,76 @@ export async function countCollection(
 }
 
 export type Facet = { value: string; count: number };
+
+export type RankedRelease = Pick<
+  CollectionItem,
+  'discogsReleaseId' | 'title' | 'artists' | 'coverUrl' | 'communityHave' | 'communityWant'
+> & { lowestPriceEur: string | null; statisticsFetchedAt: Date | null };
+
+/** Deux tops sur les éditions actives du propriétaire, jamais sur le catalogue global. */
+export async function getCollectionHighlights(userId: string) {
+  const ranked = (kind: 'wanted' | 'value') =>
+    db
+      .select({
+        discogsReleaseId: discogsReleases.discogsReleaseId,
+        title: discogsReleases.title,
+        artists: discogsReleases.artistsText,
+        coverUrl: discogsReleases.primaryImageUrl,
+        communityHave: discogsReleases.communityHave,
+        communityWant: discogsReleases.communityWant,
+        lowestPriceEur: discogsReleases.lowestPriceEur,
+        statisticsFetchedAt: discogsReleases.statisticsFetchedAt,
+      })
+      .from(collectionInstances)
+      .innerJoin(discogsReleases, eq(discogsReleases.id, collectionInstances.releaseId))
+      .where(
+        and(
+          ...baseFilters(userId, {}),
+          kind === 'wanted'
+            ? sql`${discogsReleases.communityWant} > 0`
+            : sql`${discogsReleases.lowestPriceEur} > 0 and ${discogsReleases.numForSale} > 0`,
+        ),
+      )
+      .groupBy(discogsReleases.id)
+      .orderBy(
+        kind === 'wanted'
+          ? sql`${discogsReleases.communityWant} desc`
+          : sql`${discogsReleases.lowestPriceEur} desc`,
+        discogsReleases.titleNormalized,
+        discogsReleases.id,
+      )
+      .limit(5);
+  const [wanted, valuable, [coverage]] = await Promise.all([
+    ranked('wanted'),
+    ranked('value'),
+    db
+      .select({
+        total: sql<number>`count(distinct ${discogsReleases.id})::int`,
+        fetched: sql<number>`count(distinct ${discogsReleases.id}) filter (where ${discogsReleases.statisticsFetchedAt} is not null)::int`,
+      })
+      .from(collectionInstances)
+      .innerJoin(discogsReleases, eq(discogsReleases.id, collectionInstances.releaseId))
+      .where(and(...baseFilters(userId, {}))),
+  ]);
+  return { wanted, valuable, total: coverage?.total ?? 0, fetched: coverage?.fetched ?? 0 };
+}
+
+/** Les absences sont rafraîchies au même rythme que les valeurs, sans boucle de requêtes. */
+export async function listStaleCollectionStatistics(userId: string): Promise<string[]> {
+  const threshold = new Date(Date.now() - STATISTICS_FRESHNESS_MS).toISOString();
+  const rows = await db
+    .selectDistinct({ discogsReleaseId: discogsReleases.discogsReleaseId })
+    .from(collectionInstances)
+    .innerJoin(discogsReleases, eq(discogsReleases.id, collectionInstances.releaseId))
+    .where(
+      and(
+        ...baseFilters(userId, {}),
+        sql`(${discogsReleases.statisticsFetchedAt} is null
+      or ${discogsReleases.statisticsFetchedAt} < ${threshold}::timestamptz)`,
+      ),
+    );
+  return rows.map((row) => row.discogsReleaseId);
+}
 
 /**
  * Genres et styles réellement présents dans la collection de l'utilisateur, avec leur

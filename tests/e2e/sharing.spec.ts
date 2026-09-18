@@ -16,6 +16,7 @@ const sql = postgres(process.env.DATABASE_URL ?? '', { max: 2 });
 const ALICE_DISCOGS_ID = '994000001';
 const BOB_DISCOGS_ID = '994000002';
 const RELEASE_ID = 'test-9940001';
+const BOB_RELEASE_ID = 'test-9940002';
 
 let aliceToken: string;
 let bobToken: string;
@@ -23,7 +24,7 @@ let bobId: string;
 
 async function cleanup() {
   await sql`delete from users where discogs_user_id in (${ALICE_DISCOGS_ID}, ${BOB_DISCOGS_ID})`;
-  await sql`delete from discogs_releases where discogs_release_id = ${RELEASE_ID}`;
+  await sql`delete from discogs_releases where discogs_release_id in (${RELEASE_ID}, ${BOB_RELEASE_ID})`;
 }
 
 async function createSession(userId: string): Promise<string> {
@@ -108,6 +109,16 @@ test('un ami accepte une invitation, consulte la collection, puis y perd l’acc
   await expect(page.getByText('Vous consultez la collection de e2e_alice_sharing.')).toBeVisible();
   await expect(page.getByRole('link', { name: /Album Partagé/ })).toBeVisible();
 
+  // Accès direct depuis Collection, sans repasser par Amis.
+  const switcher = page.getByRole('combobox', { name: 'Collection affichée' });
+  await expect(page.getByRole('link', { name: 'Synchroniser', exact: true })).toHaveCount(0);
+  await expect(switcher.locator('option:checked')).toHaveText('e2e_alice_sharing');
+  await switcher.selectOption({ label: 'Ma collection' });
+  await expect(page.getByText('Votre collection est vide pour le moment')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Synchroniser', exact: true })).toBeVisible();
+  await switcher.selectOption({ label: 'e2e_alice_sharing' });
+  await expect(page.getByRole('link', { name: /Album Partagé/ })).toBeVisible();
+
   // Retour explicite à sa propre collection, vide.
   await page.getByRole('button', { name: 'Revenir à ma collection' }).click();
   await expect(page.getByText('Vous consultez la collection de')).toHaveCount(0);
@@ -146,6 +157,7 @@ test('un ami accepte une invitation, consulte la collection, puis y perd l’acc
   await page.goto('/collection');
   await expect(page.getByText('Vous consultez la collection de')).toHaveCount(0);
   await expect(page.getByText('Votre collection est vide pour le moment')).toBeVisible();
+  await expect(switcher.locator('option')).toHaveCount(1);
   await page.goto('/amis');
   await expect(page.getByText('Personne ne partage encore sa collection avec vous.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Consulter cette collection' })).toHaveCount(0);
@@ -175,4 +187,48 @@ test('un lien d’invitation déjà consommé est refusé', async ({ page }) => 
   await sql`delete from collection_shares where owner_id in (
     select id from users where discogs_user_id = ${ALICE_DISCOGS_ID}
   )`;
+});
+
+test('changer de collection remplace les albums et réinitialise la recherche', async ({ page }) => {
+  const [release] = await sql<{ id: string }[]>`
+    insert into discogs_releases (
+      discogs_release_id, title, artists_text, search_text, title_normalized, artists_normalized
+    ) values (${BOB_RELEASE_ID}, 'Album de Bob', 'Artiste Bob', 'album de bob artiste bob', 'album de bob', 'artiste bob')
+    returning id
+  `;
+  await sql`
+    insert into collection_instances (user_id, release_id, discogs_instance_id, date_added)
+    values (${bobId}, ${release!.id}, '9940002', ${new Date()})
+  `;
+
+  await signInAs(page, aliceToken);
+  await page.goto('/amis');
+  await page.getByRole('button', { name: 'Générer un lien d’invitation' }).click();
+  const invitationPath = new URL(await page.locator('code').innerText()).pathname;
+  await signInAs(page, bobToken);
+  await page.goto(invitationPath);
+  await page.getByRole('button', { name: 'Accepter l’invitation' }).click();
+  await expect(page).toHaveURL(/\/collection$/);
+
+  const switcher = page.getByRole('combobox', { name: 'Collection affichée' });
+  const search = page.getByRole('searchbox');
+  await search.fill('introuvable');
+  await expect(page.getByText('Aucun album ne correspond à cette recherche.')).toBeVisible();
+  await switcher.selectOption({ label: 'Ma collection' });
+  await expect(search).toHaveValue('');
+  await expect(page.getByRole('link', { name: /Album de Bob/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Album Partagé/ })).toHaveCount(0);
+
+  // Un refus conserve la collection affichée et permet de réessayer.
+  await page.route('**/api/collection-shares/active', (route) => route.fulfill({ status: 403 }));
+  await switcher.selectOption({ label: 'e2e_alice_sharing' });
+  await expect(page.getByRole('main').getByRole('alert')).toHaveText(
+    'Une erreur est survenue. Réessayez.',
+  );
+  await expect(switcher.locator('option:checked')).toHaveText('Ma collection');
+  await expect(page.getByRole('link', { name: /Album de Bob/ })).toBeVisible();
+  await page.unroute('**/api/collection-shares/active');
+  await switcher.selectOption({ label: 'e2e_alice_sharing' });
+  await expect(page.getByRole('link', { name: /Album Partagé/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Album de Bob/ })).toHaveCount(0);
 });

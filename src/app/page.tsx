@@ -5,6 +5,8 @@ import { Logo } from '@/lib/ui/logo';
 import { getCurrentUser } from '@/modules/auth/current-user';
 import { SpotifyPreferenceToggle } from '@/modules/auth/components/spotify-preference';
 import { countCollection } from '@/modules/collection/service';
+import { CollectionHighlights } from '@/modules/collection/components/collection-highlights';
+import { requestCollectionStatisticsRefresh } from '@/modules/sync/service';
 import { ViewingAsBanner } from '@/modules/sharing/components/viewing-as-banner';
 
 /**
@@ -40,9 +42,10 @@ export default async function HomePage() {
   }
 
   const count = await countCollection(user.activeCollectionOwnerId);
+  await requestCollectionStatisticsRefresh(user.id);
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-8 px-4 py-12 sm:px-6">
+    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-12 sm:px-6">
       <h1 className="text-2xl font-semibold tracking-tight">{t('home.hub.title')}</h1>
 
       {/* Onboarding facultatif (ADR-0006) : disparaît dès qu'une réponse est donnée,
@@ -73,6 +76,8 @@ export default async function HomePage() {
           hint={t('home.hub.radio.hint')}
         />
       </nav>
+
+      <CollectionHighlights userId={user.id} viewingFriend={user.activeCollectionOwner !== null} />
 
       <Link href="/parametres" className="text-sm underline">
         {t('nav.settings')}

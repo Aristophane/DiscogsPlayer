@@ -9,6 +9,7 @@ import {
   getReleaseForUser,
 } from '@/modules/catalog/release-service';
 import { TracklistPending } from '@/modules/catalog/components/tracklist-pending';
+import { CommunityStats } from '@/modules/catalog/components/community-stats';
 import { AlbumCover } from '@/modules/collection/components/album-cover';
 import { coverProxyUrl } from '@/modules/collection/cover';
 import { PlayButton } from '@/modules/playback/components/play-button';
@@ -76,6 +77,18 @@ export default async function ReleasePage({ params }: { params: Promise<{ releas
         <div className="flex flex-col gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">{release.title}</h1>
           <p className="text-lg text-muted">{release.artists}</p>
+          <div className="border-y border-border py-3 my-2">
+            <CommunityStats have={release.communityHave} want={release.communityWant} />
+            {release.statisticsFetchedAt ? (
+              <p className="mt-2 text-xs text-muted">
+                {t('statistics.updated', {
+                  date: release.statisticsFetchedAt.toLocaleDateString('fr-FR', {
+                    timeZone: 'Europe/Paris',
+                  }),
+                })}
+              </p>
+            ) : null}
+          </div>
 
           <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
             {release.year !== null ? (

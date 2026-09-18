@@ -21,6 +21,35 @@ import { cleanArtistName, formatArtistCredit, normalizeText, parseTracklist } fr
 /** Une édition dont les détails datent de plus de 30 jours est rechargée (G-18). */
 export const DETAILS_FRESHNESS_DAYS = 30;
 
+export const STATISTICS_FRESHNESS_MS = 24 * 3_600_000;
+
+function statisticsValues(details: ReleaseDetails, now = new Date()) {
+  return {
+    communityHave: details.community?.have ?? null,
+    communityWant: details.community?.want ?? null,
+    lowestPriceEur: details.num_for_sale === 0 ? null : (details.lowest_price?.toFixed(2) ?? null),
+    numForSale: details.num_for_sale ?? null,
+    statisticsFetchedAt: now,
+  };
+}
+
+/** Rafraîchit les compteurs sans remplacer les pistes ni leurs correspondances. */
+export async function applyReleaseStatistics(details: ReleaseDetails): Promise<void> {
+  await db
+    .update(discogsReleases)
+    .set(statisticsValues(details))
+    .where(eq(discogsReleases.discogsReleaseId, String(details.id)));
+}
+
+export async function releaseStatisticsAreFresh(discogsReleaseId: string): Promise<boolean> {
+  const [release] = await db
+    .select({ fetchedAt: discogsReleases.statisticsFetchedAt })
+    .from(discogsReleases)
+    .where(eq(discogsReleases.discogsReleaseId, discogsReleaseId))
+    .limit(1);
+  return !!release?.fetchedAt && release.fetchedAt.getTime() > Date.now() - STATISTICS_FRESHNESS_MS;
+}
+
 /**
  * Discogs renvoie `0` pour une année inconnue. Stocker ce zéro afficherait « 0 » dans la
  * fiche album : une année absente doit rester absente.
@@ -243,6 +272,7 @@ export async function applyReleaseDetails(details: ReleaseDetails): Promise<stri
         styles: details.styles ?? [],
         formats: details.formats ?? [],
         country: details.country ?? null,
+        ...statisticsValues(details),
         detailsFetchedAt: new Date(),
         updatedAt: new Date(),
       })

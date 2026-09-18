@@ -35,6 +35,10 @@ export type ReleaseView = {
   styles: string[];
   coverUrl: string | null;
   detailsFetchedAt: Date | null;
+  communityHave: number | null;
+  communityWant: number | null;
+  lowestPriceEur: string | null;
+  statisticsFetchedAt: Date | null;
   instanceCount: number;
   tracks: ReleaseTrack[];
   /** Vidéos déjà fournies par Discogs : candidats gratuits pour le Lot 6 (§13.1). */
@@ -58,6 +62,10 @@ export async function getReleaseForUser(
       styles: discogsReleases.styles,
       coverUrl: discogsReleases.primaryImageUrl,
       detailsFetchedAt: discogsReleases.detailsFetchedAt,
+      communityHave: discogsReleases.communityHave,
+      communityWant: discogsReleases.communityWant,
+      lowestPriceEur: discogsReleases.lowestPriceEur,
+      statisticsFetchedAt: discogsReleases.statisticsFetchedAt,
       instanceCount: sql<string>`count(*)::text`,
     })
     .from(collectionInstances)

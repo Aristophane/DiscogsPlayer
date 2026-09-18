@@ -31,6 +31,21 @@ export type EnqueueOptions = {
   priority?: number;
 };
 
+/** Enfile un lot sans avancer les reprises après un 429 déjà programmées. */
+export async function enqueueBackgroundBatch(type: string, releaseIds: string[]): Promise<void> {
+  const unique = [...new Set(releaseIds)];
+  for (let offset = 0; offset < unique.length; offset += 500) {
+    const values = unique.slice(offset, offset + 500).map(
+      (discogsReleaseId) => sql`(
+      ${type}, ${JSON.stringify({ discogsReleaseId })}::jsonb, ${`${type}:${discogsReleaseId}`}, -10
+    )`,
+    );
+    await db.execute(sql`insert into ${tasks} (type, payload, dedupe_key, priority)
+      values ${sql.join(values, sql`, `)}
+      on conflict (dedupe_key) where status in ('queued', 'running', 'retry_wait') do nothing`);
+  }
+}
+
 /**
  * Ajoute une tâche, ou met à jour celle déjà vivante portant la même clé de
  * déduplication (§12.2).

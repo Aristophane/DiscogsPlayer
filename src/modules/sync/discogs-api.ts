@@ -92,6 +92,15 @@ const collectionPageSchema = z.object({
 
 const releaseSchema = z.object({
   id: z.number().int().positive(),
+  community: z
+    .object({
+      have: z.number().int().nonnegative().nullable().optional(),
+      want: z.number().int().nonnegative().nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+  lowest_price: z.number().nonnegative().nullable().optional(),
+  num_for_sale: z.number().int().nonnegative().nullable().optional(),
   master_id: z.number().int().nullable().optional(),
   title: z.string(),
   year: z.number().int().nullable().optional(),
@@ -320,7 +329,8 @@ export const liveDiscogsApi: DiscogsApi = {
   },
 
   async getRelease(discogsReleaseId, tokens) {
-    const url = `${getEnv().DISCOGS_API_BASE_URL}/releases/${encodeURIComponent(discogsReleaseId)}`;
+    // Le catalogue est partagé : imposer une devise commune, indépendante du compte.
+    const url = `${getEnv().DISCOGS_API_BASE_URL}/releases/${encodeURIComponent(discogsReleaseId)}?curr_abbr=EUR`;
 
     return parseOrThrow(releaseSchema, await requestJson(url, tokens), 'DISCOGS_RELEASE_SHAPE');
   },

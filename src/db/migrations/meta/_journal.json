@@ -71,6 +71,13 @@
       "when": 1788448773013,
       "tag": "0009_medical_havok",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789749711808,
+      "tag": "0010_living_anthem",
+      "breakpoints": true
     }
   ]
 }

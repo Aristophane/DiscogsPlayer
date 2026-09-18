@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 
 import { t } from '@/lib/i18n';
+import { CommunityStats } from '@/modules/catalog/components/community-stats';
 import { AlbumCover } from '@/modules/collection/components/album-cover';
 import { coverProxyUrl } from '@/modules/collection/cover';
 
@@ -17,6 +18,8 @@ type DrawnRelease = {
   genres: string[];
   styles: string[];
   coverUrl: string | null;
+  communityHave: number | null;
+  communityWant: number | null;
 };
 
 type SessionState = {
@@ -174,6 +177,7 @@ export function RandomDrawer({
             <div className="flex flex-col gap-2">
               <h2 className="text-xl font-semibold">{release.title}</h2>
               <p className="text-muted">{release.artists}</p>
+              <CommunityStats have={release.communityHave} want={release.communityWant} />
               {release.year !== null ? <p className="text-sm text-muted">{release.year}</p> : null}
               {release.genres.length > 0 ? (
                 <p className="text-sm text-muted">{release.genres.join(', ')}</p>

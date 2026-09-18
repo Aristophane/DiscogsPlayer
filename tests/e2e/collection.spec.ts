@@ -130,6 +130,16 @@ test('la collection est accessible et se rend sur mobile', async ({ page }, test
   await page.goto('/collection');
 
   await expect(page.getByRole('heading', { name: 'Collection', level: 1 })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Synchroniser', exact: true })).toHaveAttribute(
+    'href',
+    '/import',
+  );
+  await expect(page.getByRole('main').getByRole('link', { name: 'Paramètres' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Voir l’import' })).toHaveCount(0);
+  await expect(page.getByRole('combobox', { name: 'Collection affichée' })).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Découvrir les collections de mes amis' }),
+  ).toHaveAttribute('href', '/amis');
   await expect(page.getByRole('link', { name: /Ágætis Byrjun/ })).toBeVisible();
 
   // Pochette manquante : un texte explicite, jamais une image cassée (§22.5). Le repli

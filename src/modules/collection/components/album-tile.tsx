@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { t } from '@/lib/i18n';
+import { CommunityStats } from '@/modules/catalog/components/community-stats';
 import type { CollectionItem } from '@/modules/collection/service';
 import { PlayButton } from '@/modules/playback/components/play-button';
 
@@ -11,8 +12,8 @@ import { AlbumCover } from './album-cover';
 /**
  * Tuile d'album (§7.3).
  *
- * La pochette occupe la majorité de la tuile ; ni prix, ni statistiques, ni information de
- * marché. Le ratio carré est réservé avant chargement pour que la grille ne saute pas
+ * La pochette domine la tuile ; les compteurs communautaires complètent son identité.
+ * Le ratio carré est réservé avant chargement pour que la grille ne saute pas
  * (CLS < 0,1, §20.1).
  */
 export function AlbumTile({ item, priority }: { item: CollectionItem; priority: boolean }) {
@@ -58,6 +59,9 @@ export function AlbumTile({ item, priority }: { item: CollectionItem; priority: 
           <span className="line-clamp-2 text-xs leading-tight text-muted">{item.artists}</span>
         </div>
       </Link>
+      <div className="mt-2">
+        <CommunityStats have={item.communityHave} want={item.communityWant} />
+      </div>
     </li>
   );
 }

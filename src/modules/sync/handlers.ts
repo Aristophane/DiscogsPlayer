@@ -7,12 +7,17 @@
 import { z } from 'zod';
 
 import { moduleLogger } from '@/lib/logger';
-import { applyReleaseDetails } from '@/modules/catalog/service';
+import {
+  applyReleaseDetails,
+  applyReleaseStatistics,
+  releaseStatisticsAreFresh,
+} from '@/modules/catalog/service';
 
 import { DiscogsApiError, liveDiscogsApi, type DiscogsApi } from './discogs-api';
 import type { TaskRow } from './queue';
 import {
   TASK_FETCH_RELEASE,
+  TASK_FETCH_STATISTICS,
   TASK_SYNC_COLLECTION,
   markRunFailed,
   runCollectionSync,
@@ -87,6 +92,23 @@ export async function runTask(task: TaskRow, api: DiscogsApi = liveDiscogsApi): 
         throw error;
       }
 
+      return;
+    }
+
+    case TASK_FETCH_STATISTICS: {
+      const payload = fetchReleasePayload.parse(task.payload);
+      // Un import complet passé devant cette tâche a peut-être déjà fourni les chiffres.
+      if (!(await releaseStatisticsAreFresh(payload.discogsReleaseId))) {
+        const details = await api.getRelease(payload.discogsReleaseId);
+        if (String(details.id) !== payload.discogsReleaseId) {
+          throw new DiscogsApiError({
+            code: 'DISCOGS_RELEASE_MISMATCH',
+            message: 'Édition inattendue',
+            retryable: false,
+          });
+        }
+        await applyReleaseStatistics(details);
+      }
       return;
     }
 

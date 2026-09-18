@@ -15,14 +15,20 @@ import { collectionInstances, syncRuns, users } from '@/db/schema';
 import { moduleLogger } from '@/lib/logger';
 import { selectStaleReleaseIds, upsertReleaseSummary } from '@/modules/catalog/service';
 import { getDiscogsTokens } from '@/modules/auth/service';
+import { listStaleCollectionStatistics } from '@/modules/collection/service';
 
 import { DiscogsApiError, liveDiscogsApi, type DiscogsApi } from './discogs-api';
-import { enqueue } from './queue';
+import { enqueue, enqueueBackgroundBatch } from './queue';
 
 const log = moduleLogger('sync');
 
 export const TASK_SYNC_COLLECTION = 'discogs.sync_collection';
 export const TASK_FETCH_RELEASE = 'discogs.fetch_release';
+export const TASK_FETCH_STATISTICS = 'discogs.fetch_statistics';
+
+export async function requestCollectionStatisticsRefresh(userId: string): Promise<void> {
+  await enqueueBackgroundBatch(TASK_FETCH_STATISTICS, await listStaleCollectionStatistics(userId));
+}
 
 /** SYNC-003 : une actualisation automatique au plus toutes les 24 heures. */
 const SCHEDULED_MIN_INTERVAL_MS = 24 * 3_600_000;
@@ -374,6 +380,8 @@ export async function runCollectionSync(
       ),
     )
     .returning({ id: collectionInstances.id });
+
+  await requestCollectionStatisticsRefresh(run.userId);
 
   await db
     .update(syncRuns)
