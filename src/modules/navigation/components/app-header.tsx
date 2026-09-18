@@ -14,12 +14,13 @@ import { Logo } from '@/lib/ui/logo';
  * pour l'accès direct depuis n'importe quel écran, y compris la fiche album et l'import,
  * que la barre basse ne couvre pas. Radio est un lien actif depuis le Lot 6 (ADR-0006).
  *
- * Menu déroulant sous `lg:` : les six liens, dont Amis, doivent rester accessibles
+ * Menu déroulant sous `xl:` : les liens et le sélecteur restent accessibles
  * sans défilement horizontal sur mobile et sur les écrans de 640 px.
  */
 const LINKS: { href: string; labelKey: MessageKey }[] = [
   { href: '/', labelKey: 'nav.home' },
   { href: '/collection', labelKey: 'nav.collection' },
+  { href: '/bacs', labelKey: 'nav.crates' },
   { href: '/aleatoire', labelKey: 'nav.random' },
   { href: '/radio', labelKey: 'nav.radio' },
   { href: '/amis', labelKey: 'nav.friends' },
@@ -82,7 +83,7 @@ export function AppHeader({ collectionSwitcher }: { collectionSwitcher: ReactNod
 
         <nav
           aria-label={t('app.name')}
-          className="ml-auto hidden shrink-0 items-center gap-1 lg:flex"
+          className="ml-auto hidden shrink-0 items-center gap-1 xl:flex"
         >
           {LINKS.map((link) => {
             const active = pathname === link.href;
@@ -108,7 +109,7 @@ export function AppHeader({ collectionSwitcher }: { collectionSwitcher: ReactNod
           aria-expanded={mobileOpen}
           aria-controls="mobile-nav-panel"
           aria-label={mobileOpen ? t('nav.menu.close') : t('nav.menu.open')}
-          className="ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border text-base lg:hidden"
+          className="ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border text-base xl:hidden"
         >
           <span aria-hidden="true">{mobileOpen ? '✕' : '☰'}</span>
         </button>
@@ -118,7 +119,7 @@ export function AppHeader({ collectionSwitcher }: { collectionSwitcher: ReactNod
         <nav
           id="mobile-nav-panel"
           aria-label={t('app.name')}
-          className="flex flex-col gap-1 border-t border-border px-4 py-2 lg:hidden"
+          className="flex flex-col gap-1 border-t border-border px-4 py-2 xl:hidden"
         >
           {LINKS.map((link) => {
             const active = pathname === link.href;
