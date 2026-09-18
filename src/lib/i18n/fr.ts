@@ -14,6 +14,7 @@ export const fr = {
   'nav.collection': 'Collection',
   'nav.random': 'Aléatoire',
   'nav.radio': 'Radio',
+  'nav.friends': 'Amis',
   'nav.playing': 'Lecture en cours',
   'nav.settings': 'Paramètres',
   'nav.menu.open': 'Ouvrir le menu',
@@ -216,9 +217,13 @@ export const fr = {
   'error.notFound': 'Cette page n’existe pas.',
 
   // Partage de collection (Lot 7, demande produit 2026-09-03)
+  'sharing.explanation':
+    'Retrouvez ici les collections de vos amis après avoir accepté leur invitation. L’accès reste disponible, même après une reconnexion, jusqu’à ce que votre ami le retire.',
+  'sharing.loading': 'Chargement des collections…',
+  'sharing.retry': 'Réessayer',
   'sharing.invite.title': 'Inviter un ami',
   'sharing.invite.explanation':
-    'Générez un lien à usage unique : la personne qui l’ouvre pourra parcourir et écouter votre collection, avec son propre compte Discogs.',
+    'Générez un lien à usage unique : après acceptation avec son compte Discogs, votre ami retrouvera votre collection dans la section Amis. Le lien ne sera plus utilisable, mais l’accès restera actif jusqu’à ce que vous le retiriez.',
   'sharing.invite.generate': 'Générer un lien d’invitation',
   'sharing.invite.generating': 'Génération…',
   'sharing.invite.copy': 'Copier le lien',
@@ -249,6 +254,9 @@ export const fr = {
   'invitation.signIn': 'Se connecter avec Discogs pour accepter',
   'invitation.invalid.title': 'Invitation introuvable',
   'invitation.invalid.explanation': 'Ce lien d’invitation est invalide, déjà utilisé, ou a expiré.',
+  'invitation.invalid.friends': 'Retrouver mes amis',
+  'invitation.invalid.accepted':
+    'Si vous avez déjà accepté cette invitation, la collection reste accessible dans la section Amis tant que son propriétaire partage son accès avec vous.',
   'invitation.invalid.backHome': 'Retour à l’accueil',
   'invitation.alreadySignedInAs': 'Vous êtes connecté en tant que {username}.',
 } as const;

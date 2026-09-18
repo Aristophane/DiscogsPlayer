@@ -9,18 +9,19 @@ type Grant = { createdAt: string };
 type GivenGrant = Grant & { granteeId: string; granteeUsername: string };
 type ReceivedGrant = Grant & { ownerId: string; ownerUsername: string };
 
-async function fetchShares(): Promise<{ given: GivenGrant[]; received: ReceivedGrant[] } | null> {
+async function fetchShares(): Promise<{ given: GivenGrant[]; received: ReceivedGrant[] }> {
   const response = await fetch('/api/collection-shares', {
     headers: { accept: 'application/json' },
+    cache: 'no-store',
   });
   if (!response.ok) {
-    return null;
+    throw new Error('Unable to load collection shares');
   }
   return response.json();
 }
 
 /**
- * Gestion des partages depuis les paramètres (Lot 7) : inviter, voir qui a accès à sa
+ * Gestion des partages depuis Amis et les paramètres : inviter, voir qui a accès à sa
  * collection, révoquer, et basculer vers une collection reçue.
  *
  * Charge la liste après montage plutôt que de la recevoir en props serveur : elle change
@@ -38,20 +39,26 @@ export function SharingManager({ activeCollectionOwnerId }: { activeCollectionOw
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    fetchShares().then((data) => {
-      if (data) {
-        setGiven(data.given);
-        setReceived(data.received);
-      }
-    });
+    let cancelled = false;
+    fetchShares()
+      .then((data) => {
+        if (!cancelled) {
+          setGiven(data.given);
+          setReceived(data.received);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function refresh() {
     const data = await fetchShares();
-    if (data) {
-      setGiven(data.given);
-      setReceived(data.received);
-    }
+    setGiven(data.given);
+    setReceived(data.received);
   }
 
   async function generateInvite() {
@@ -122,6 +129,7 @@ export function SharingManager({ activeCollectionOwnerId }: { activeCollectionOw
         setError(true);
         return;
       }
+      router.push('/collection');
       router.refresh();
     } catch {
       setError(true);
@@ -166,7 +174,11 @@ export function SharingManager({ activeCollectionOwnerId }: { activeCollectionOw
 
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-medium">{t('sharing.received.title')}</h2>
-        {received === null ? null : received.length === 0 ? (
+        {received === null ? (
+          <p role="status" className="text-sm text-muted">
+            {error ? t('sharing.error') : t('sharing.loading')}
+          </p>
+        ) : received.length === 0 ? (
           <p className="text-sm text-muted">{t('sharing.received.empty')}</p>
         ) : (
           <ul className="flex flex-col gap-2">
@@ -175,23 +187,22 @@ export function SharingManager({ activeCollectionOwnerId }: { activeCollectionOw
               return (
                 <li
                   key={grant.ownerId}
-                  className="flex items-center justify-between gap-3 rounded-md border border-border p-3"
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3"
                 >
-                  <span className="text-sm">{grant.ownerUsername}</span>
+                  <span className="min-w-0 break-all text-sm">{grant.ownerUsername}</span>
                   {isActive ? (
                     <span className="text-xs text-muted">{t('sharing.received.current')}</span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => switchTo(grant.ownerId)}
-                      disabled={busy === grant.ownerId}
-                      className="rounded-md border border-border px-3 py-1.5 text-sm disabled:opacity-50"
-                    >
-                      {busy === grant.ownerId
-                        ? t('sharing.received.switching')
-                        : t('sharing.received.switch')}
-                    </button>
-                  )}
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => switchTo(grant.ownerId)}
+                    disabled={busy !== null}
+                    className="rounded-md border border-border px-3 py-1.5 text-sm disabled:opacity-50"
+                  >
+                    {busy === grant.ownerId
+                      ? t('sharing.received.switching')
+                      : t('sharing.received.switch')}
+                  </button>
                 </li>
               );
             })}
@@ -228,9 +239,23 @@ export function SharingManager({ activeCollectionOwnerId }: { activeCollectionOw
       </section>
 
       {error ? (
-        <p role="alert" className="text-sm text-red-500">
-          {t('sharing.error')}
-        </p>
+        <div className="flex flex-col items-start gap-2">
+          <p role="alert" className="text-sm text-red-500">
+            {t('sharing.error')}
+          </p>
+          {received === null ? (
+            <button
+              type="button"
+              className="text-sm underline"
+              onClick={() => {
+                setError(false);
+                void refresh().catch(() => setError(true));
+              }}
+            >
+              {t('sharing.retry')}
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

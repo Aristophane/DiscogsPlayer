@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 200" fill="none" width="100%" height="100%">
+  <style>
+    .fg-stroke { stroke: #111; }
+    .fg-fill { fill: #111; }
+    .groove { stroke: #111; }
+    @media (prefers-color-scheme: dark) {
+      .fg-stroke { stroke: #eee; }
+      .fg-fill { fill: #eee; }
+      .groove { stroke: #eee; }
+    }
+  </style>
+
+  <!-- Pochette arrière (collection) -->
+  <rect x="20" y="35" width="100" height="100" rx="5" class="fg-stroke" stroke-width="3.5" opacity="0.3" />
+
+  <!-- Pochette intermédiaire -->
+  <rect x="35" y="47" width="100" height="100" rx="5" class="fg-stroke" stroke-width="3.5" opacity="0.6" />
+
+  <!-- Pochette avant -->
+  <rect x="50" y="60" width="100" height="100" rx="5" class="fg-stroke" stroke-width="4" />
+
+  <!-- Vinyle extrait vers la droite -->
+  <g transform="translate(25, 0)">
+    <!-- Bord vinyle -->
+    <circle cx="125" cy="110" r="54" class="fg-stroke" stroke-width="4.5" />
+    <!-- Sillons -->
+    <circle cx="125" cy="110" r="44" class="groove" stroke-width="1.8" stroke-dasharray="16 5 24 6" opacity="0.6" />
+    <circle cx="125" cy="110" r="34" class="groove" stroke-width="1.5" stroke-dasharray="10 4 18 5" opacity="0.45" />
+    <!-- Macaron central -->
+    <circle cx="125" cy="110" r="22" class="fg-stroke" stroke-width="3" />
+    <!-- Flèche de lecture -->
+    <polygon points="120,98 138,110 120,122" class="fg-fill" stroke-linejoin="round" />
+  </g>
+</svg>

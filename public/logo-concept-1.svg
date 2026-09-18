@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none" width="100%" height="100%">
+  <style>
+    .fg-stroke { stroke: #111; }
+    .fg-fill { fill: #111; }
+    .groove { stroke: #111; }
+    @media (prefers-color-scheme: dark) {
+      .fg-stroke { stroke: #eee; }
+      .fg-fill { fill: #eee; }
+      .groove { stroke: #eee; }
+    }
+  </style>
+
+  <!-- Contour vinyle extérieur -->
+  <circle cx="100" cy="100" r="90" class="fg-stroke" stroke-width="5" />
+
+  <!-- Microsillons concentriques nets -->
+  <circle cx="100" cy="100" r="78" class="groove" stroke-width="2.5" stroke-dasharray="24 6 36 8 16 5" opacity="0.75" />
+  <circle cx="100" cy="100" r="67" class="groove" stroke-width="2" stroke-dasharray="32 8 22 6" opacity="0.55" />
+  <circle cx="100" cy="100" r="56" class="groove" stroke-width="2.2" stroke-dasharray="16 6 28 7" opacity="0.7" />
+  <circle cx="100" cy="100" r="45" class="groove" stroke-width="1.8" stroke-dasharray="26 7 14 5" opacity="0.45" />
+
+  <!-- Macaron central épuré -->
+  <circle cx="100" cy="100" r="32" class="fg-stroke" stroke-width="4" />
+
+  <!-- Flèche Play centrée et nette -->
+  <polygon points="92,78 122,100 92,122" class="fg-fill" stroke-linejoin="round" />
+
+  <!-- Trou d'axe central -->
+  <circle cx="86" cy="100" r="2.5" class="fg-fill" opacity="0.7" />
+</svg>

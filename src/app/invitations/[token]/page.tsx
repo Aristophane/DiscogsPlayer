@@ -20,6 +20,14 @@ export default async function InvitationPage({ params }: { params: Promise<{ tok
       <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-start justify-center gap-4 px-6 py-16">
         <h1 className="text-2xl font-semibold tracking-tight">{t('invitation.invalid.title')}</h1>
         <p className="text-muted">{t('invitation.invalid.explanation')}</p>
+        {user ? (
+          <>
+            <p className="text-sm text-muted">{t('invitation.invalid.accepted')}</p>
+            <Link href="/amis" className="text-sm underline">
+              {t('invitation.invalid.friends')}
+            </Link>
+          </>
+        ) : null}
         <Link href="/" className="text-sm underline">
           {t('invitation.invalid.backHome')}
         </Link>

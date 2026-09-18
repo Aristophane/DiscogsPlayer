@@ -11,6 +11,13 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { db, sql } from '@/db/client';
 import { collectionInvites, collectionShares, users } from '@/db/schema';
 import { upsertUserFromDiscogs } from '@/modules/auth/service';
+import { resolveActiveCollection } from '@/modules/auth/current-user';
+import {
+  createSession,
+  resolveSession,
+  revokeSession,
+  setViewingAsUserIdByToken,
+} from '@/modules/auth/sessions';
 import {
   consumeInvite,
   createInvite,
@@ -70,6 +77,37 @@ describe('invitation et partage', () => {
 
     // Le rejeu n'a créé aucun partage pour Carol.
     expect(await hasActiveGrant(aliceId, carolId)).toBe(false);
+  });
+
+  it('conserve l’accès après reconnexion et purge du lien, jusqu’à révocation', async () => {
+    const firstSession = await createSession(bobId);
+    const invite = await createInvite(aliceId);
+    await consumeInvite(invite.token, bobId);
+    await setViewingAsUserIdByToken(firstSession.token, aliceId);
+    await revokeSession(firstSession.token);
+
+    await purgeExpiredInvites(new Date(invite.expiresAt.getTime() + 1));
+    expect(await previewInvite(invite.token)).toBeNull();
+    expect(await consumeInvite(invite.token, carolId)).toBeNull();
+    expect(await hasActiveGrant(aliceId, carolId)).toBe(false);
+
+    const newSession = await createSession(bobId);
+    const user = await resolveSession(newSession.token);
+    expect(user?.viewingAsUserId).toBeNull();
+    expect(await listGrantsReceivedBy(user!.id)).toEqual([
+      expect.objectContaining({ ownerId: aliceId, ownerUsername: ALICE.username }),
+    ]);
+    await setViewingAsUserIdByToken(newSession.token, aliceId);
+    const viewingUser = await resolveSession(newSession.token);
+    expect(await resolveActiveCollection(viewingUser!)).toMatchObject({
+      activeCollectionOwnerId: aliceId,
+    });
+
+    await revokeGrant(aliceId, bobId);
+    expect(await listGrantsReceivedBy(bobId)).toEqual([]);
+    expect(await resolveActiveCollection(viewingUser!)).toMatchObject({
+      activeCollectionOwnerId: bobId,
+    });
   });
 
   it('refuse un lien expiré', async () => {

@@ -19,6 +19,7 @@ const RELEASE_ID = 'test-9940001';
 
 let aliceToken: string;
 let bobToken: string;
+let bobId: string;
 
 async function cleanup() {
   await sql`delete from users where discogs_user_id in (${ALICE_DISCOGS_ID}, ${BOB_DISCOGS_ID})`;
@@ -66,6 +67,7 @@ test.beforeAll(async () => {
 
   aliceToken = await createSession(alice!.id);
   bobToken = await createSession(bob!.id);
+  bobId = bob!.id;
 });
 
 test.afterAll(async () => {
@@ -83,9 +85,9 @@ async function signInAs(page: Page, token: string) {
 test('un ami accepte une invitation, consulte la collection, puis y perd l’accès à la révocation', async ({
   page,
 }) => {
-  // Alice génère un lien d'invitation depuis ses paramètres.
+  // Alice génère un lien d'invitation depuis la section Amis.
   await signInAs(page, aliceToken);
-  await page.goto('/parametres');
+  await page.goto('/amis');
   await page.getByRole('button', { name: 'Générer un lien d’invitation' }).click();
 
   const inviteCode = await page.locator('code').innerText();
@@ -111,14 +113,27 @@ test('un ami accepte une invitation, consulte la collection, puis y perd l’acc
   await expect(page.getByText('Vous consultez la collection de')).toHaveCount(0);
   await expect(page.getByText('Votre collection est vide pour le moment')).toBeVisible();
 
-  // Depuis ses paramètres, Bob peut aussi rebasculer vers la collection reçue.
+  // Bob se déconnecte puis ouvre une nouvelle session : le partage survit à la session.
   await page.goto('/parametres');
-  await Promise.all([
-    page.waitForResponse((response) => response.url().endsWith('/api/collection-shares/active')),
-    page.getByRole('button', { name: 'Consulter cette collection' }).click(),
-  ]);
+  await page.getByRole('button', { name: 'Se déconnecter', exact: true }).click();
+  await expect(page).toHaveURL(/\/connexion$/);
+  bobToken = await createSession(bobId);
+  await signInAs(page, bobToken);
   await page.goto('/collection');
+  const menu = page.getByRole('button', { name: 'Ouvrir le menu' });
+  if (await menu.isVisible()) await menu.click();
+  await page.getByRole('link', { name: 'Amis', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Amis', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Consulter cette collection' }).click();
+  await expect(page).toHaveURL(/\/collection$/);
   await expect(page.getByText('Vous consultez la collection de e2e_alice_sharing.')).toBeVisible();
+  await expect(page.getByRole('link', { name: /Album Partagé/ })).toBeVisible();
+
+  // La collection déjà active reste ouvrable depuis Amis.
+  await page.goto('/amis');
+  await expect(page.getByText('Consultée actuellement')).toBeVisible();
+  await page.getByRole('button', { name: 'Consulter cette collection' }).click();
+  await expect(page).toHaveURL(/\/collection$/);
 
   // Alice révoque l'accès : effet immédiat, sans que Bob ait besoin de se reconnecter.
   await signInAs(page, aliceToken);
@@ -131,6 +146,9 @@ test('un ami accepte une invitation, consulte la collection, puis y perd l’acc
   await page.goto('/collection');
   await expect(page.getByText('Vous consultez la collection de')).toHaveCount(0);
   await expect(page.getByText('Votre collection est vide pour le moment')).toBeVisible();
+  await page.goto('/amis');
+  await expect(page.getByText('Personne ne partage encore sa collection avec vous.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Consulter cette collection' })).toHaveCount(0);
 });
 
 test('un lien d’invitation déjà consommé est refusé', async ({ page }) => {
@@ -148,6 +166,10 @@ test('un lien d’invitation déjà consommé est refusé', async ({ page }) => 
   // Rejeu du même lien : usage unique, refusé sans planter.
   await page.goto(`/invitations/${inviteToken}`);
   await expect(page.getByRole('heading', { name: 'Invitation introuvable' })).toBeVisible();
+  await page.getByRole('link', { name: 'Retrouver mes amis' }).click();
+  await page.getByRole('button', { name: 'Consulter cette collection' }).click();
+  await expect(page).toHaveURL(/\/collection$/);
+  await expect(page.getByRole('link', { name: /Album Partagé/ })).toBeVisible();
 
   // Nettoyage du partage créé par ce second test, pour ne pas fausser d'autres specs.
   await sql`delete from collection_shares where owner_id in (
