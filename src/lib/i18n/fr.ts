@@ -129,6 +129,20 @@ export const fr = {
 
   // Accueil connecté (ADR-0006)
   'home.hub.title': 'Que voulez-vous écouter ?',
+  'home.activity.title': 'Dans les bacs de vos amis',
+  'home.activity.description':
+    'Leurs derniers ajouts, au fil des synchronisations de leurs collections.',
+  'home.activity.added': '{username} a ajouté à sa collection',
+  'home.activity.unknownDate': 'Date d’ajout inconnue',
+  'home.activity.empty':
+    'Les nouveaux disques de vos amis apparaîtront ici lorsqu’ils partageront leur collection avec vous.',
+  'home.activity.friends': 'Voir mes amis',
+  'home.spotlight.title': 'Un disque au hasard',
+  'home.spotlight.description': 'Une idée d’écoute dans la collection que vous parcourez.',
+  'home.spotlight.another': 'Un autre disque',
+  'home.spotlight.empty':
+    'Cette collection est encore vide. Synchronisez-la ou choisissez une autre collection.',
+  'home.spotlight.error': 'Impossible de charger la suggestion. Réessayez.',
   'statistics.have': 'En collection',
   'statistics.want': 'En wantlist',
   'statistics.unavailable': 'Donnée indisponible',
@@ -147,6 +161,14 @@ export const fr = {
   'home.highlights.coverage':
     'Statistiques chargées pour {fetched} édition(s) sur {total}. Les classements se complètent pendant l’actualisation.',
   'home.highlights.refresh': 'Actualiser l’affichage',
+  'home.highlights.progressLabel': 'Actualisation des valeurs de la collection',
+  'home.highlights.progress': '{fresh} édition(s) à jour sur {total}',
+  'home.highlights.complete': 'Actualisation terminée · {total} édition(s) à jour',
+  'home.highlights.countdown': 'Mise à jour des classements dans {seconds} s',
+  'home.highlights.updating': 'Mise à jour des classements…',
+  'home.highlights.current': 'Les classements sont à jour.',
+  'home.highlights.error':
+    'Impossible d’actualiser l’affichage. Les derniers résultats restent visibles. Réessayez ou attendez la prochaine actualisation.',
   'home.highlights.own':
     'Ces classements concernent votre collection personnelle. Ouvrir un album vous y ramène.',
   'home.hub.collection': 'Collection',

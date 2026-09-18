@@ -1,7 +1,11 @@
+'use client';
+
 import Link from 'next/link';
+import { useState } from 'react';
 import { t } from '@/lib/i18n';
 import { CommunityStats } from '@/modules/catalog/components/community-stats';
-import { getCollectionHighlights, type RankedRelease } from '../service';
+import type { RankedRelease } from '../service';
+import type { Highlights } from '../home-contracts';
 import { coverProxyUrl } from '../cover';
 import { AlbumCover } from './album-cover';
 import { PersonalReleaseLink } from './personal-release-link';
@@ -9,14 +13,14 @@ import { RefreshStatistics } from './refresh-statistics';
 
 const priceFormat = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
 
-export async function CollectionHighlights({
-  userId,
+export function CollectionHighlights({
+  initial,
   viewingFriend,
 }: {
-  userId: string;
+  initial: Highlights;
   viewingFriend: boolean;
 }) {
-  const highlights = await getCollectionHighlights(userId);
+  const [highlights, setHighlights] = useState(initial);
   return (
     <section
       aria-labelledby="collection-highlights"
@@ -40,19 +44,11 @@ export async function CollectionHighlights({
         </div>
       ) : (
         <>
+          <RefreshStatistics highlights={highlights} onUpdate={setHighlights} />
           <div className="grid gap-8 md:grid-cols-2">
             <Ranking kind="valuable" items={highlights.valuable} switchToOwn={viewingFriend} />
             <Ranking kind="wanted" items={highlights.wanted} switchToOwn={viewingFriend} />
           </div>
-          {highlights.fetched < highlights.total ? (
-            <p className="text-xs text-muted" role="status">
-              {t('home.highlights.coverage', {
-                fetched: highlights.fetched,
-                total: highlights.total,
-              })}
-            </p>
-          ) : null}
-          <RefreshStatistics />
         </>
       )}
     </section>

@@ -5,15 +5,17 @@ import { useRouter } from 'next/navigation';
 import { useState, useTransition, type ReactNode } from 'react';
 import { t } from '@/lib/i18n';
 
-/** Un top reste personnel même pendant la consultation de la collection d'un ami. */
+/** Vérifie le partage côté serveur avant de changer de collection et d'ouvrir un disque. */
 export function PersonalReleaseLink({
   releaseId,
   switchToOwn,
   children,
+  ownerId = null,
 }: {
   releaseId: string;
   switchToOwn: boolean;
   children: ReactNode;
+  ownerId?: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -41,7 +43,7 @@ export function PersonalReleaseLink({
               const response = await fetch('/api/collection-shares/active', {
                 method: 'PUT',
                 headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ ownerId: null }),
+                body: JSON.stringify({ ownerId }),
               });
               if (!response.ok) {
                 setError(true);

@@ -4,8 +4,10 @@ import { t } from '@/lib/i18n';
 import { Logo } from '@/lib/ui/logo';
 import { getCurrentUser } from '@/modules/auth/current-user';
 import { SpotifyPreferenceToggle } from '@/modules/auth/components/spotify-preference';
-import { countCollection } from '@/modules/collection/service';
+import { countCollection, getCollectionHighlights } from '@/modules/collection/service';
 import { CollectionHighlights } from '@/modules/collection/components/collection-highlights';
+import { FriendsActivity } from '@/modules/collection/components/friends-activity';
+import { RandomSpotlight } from '@/modules/collection/components/random-spotlight';
 import { requestCollectionStatisticsRefresh } from '@/modules/sync/service';
 import { ViewingAsBanner } from '@/modules/sharing/components/viewing-as-banner';
 
@@ -41,7 +43,10 @@ export default async function HomePage() {
     );
   }
 
-  const count = await countCollection(user.activeCollectionOwnerId);
+  const [count, highlights] = await Promise.all([
+    countCollection(user.activeCollectionOwnerId),
+    getCollectionHighlights(user.id),
+  ]);
   await requestCollectionStatisticsRefresh(user.id);
 
   return (
@@ -77,7 +82,19 @@ export default async function HomePage() {
         />
       </nav>
 
-      <CollectionHighlights userId={user.id} viewingFriend={user.activeCollectionOwner !== null} />
+      <div className="grid items-start gap-10 border-t border-border pt-8 md:grid-cols-[minmax(0,1fr)_minmax(0,0.65fr)]">
+        <FriendsActivity userId={user.id} activeOwnerId={user.activeCollectionOwnerId} />
+        <RandomSpotlight
+          key={user.activeCollectionOwnerId}
+          ownerId={user.activeCollectionOwnerId}
+        />
+      </div>
+
+      <CollectionHighlights
+        key={user.id}
+        initial={highlights}
+        viewingFriend={user.activeCollectionOwner !== null}
+      />
 
       <Link href="/parametres" className="text-sm underline">
         {t('nav.settings')}

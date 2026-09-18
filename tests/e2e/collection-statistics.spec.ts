@@ -41,6 +41,8 @@ test.beforeAll(async () => {
 test.beforeEach(async ({ page }) => {
   await sql`update sessions set viewing_as_user_id = null where user_id = ${ownerId}`;
   await sql`update collection_instances set is_active = true where user_id = ${ownerId}`;
+  await sql`update discogs_releases set statistics_fetched_at = now(), community_want = 0, lowest_price_eur = 25.5 where discogs_release_id = ${R(1)}`;
+  await sql`update collection_shares set revoked_at = null where owner_id = ${friendId} and grantee_id = ${ownerId}`;
   await page
     .context()
     .addCookies([{ name: 'dp_session', value: token, domain: 'localhost', path: '/' }]);
@@ -64,7 +66,7 @@ test('les tops personnels sont classés, accessibles et sans débordement', asyn
   await expect(valuable.getByRole('listitem')).toHaveCount(5);
   await expect(wanted.getByRole('listitem').first()).toContainText('Édition 6');
   await expect(valuable.getByRole('listitem').first()).toContainText('153,00');
-  await expect(page.getByText('Album de mon ami')).toHaveCount(0);
+  await expect(wanted.getByText('Album de mon ami')).toHaveCount(0);
   await expect(page.getByText(/ne représente pas une vente conclue/)).toBeVisible();
   await page.getByRole('button', { name: 'Actualiser l’affichage' }).click();
   await expect(wanted.getByRole('listitem')).toHaveCount(5);
@@ -82,6 +84,78 @@ test('les tops personnels sont classés, accessibles et sans débordement', asyn
   await expect(page.getByRole('heading', { name: 'Édition 6', exact: true })).toBeVisible();
   await expect(page.getByText('En collection', { exact: true })).toBeVisible();
   await expect(page.getByText('En wantlist', { exact: true })).toBeVisible();
+});
+
+test('les classements et la barre progressent automatiquement toutes les cinq secondes', async ({
+  page,
+}) => {
+  await sql`update discogs_releases set statistics_fetched_at = now() - interval '25 hours' where discogs_release_id = ${R(1)}`;
+  let polls = 0;
+  page.on('request', (request) => {
+    if (request.url().includes('/api/collection/highlights')) polls++;
+  });
+  await page.goto('/');
+  const progress = page.getByRole('progressbar', {
+    name: 'Actualisation des valeurs de la collection',
+  });
+  await expect(progress).toHaveAttribute('aria-valuenow', '5');
+  await expect(progress).toHaveAttribute('aria-valuemax', '6');
+  await expect(page.getByText(/Mise à jour des classements dans \d s/)).toBeVisible();
+  const spotlight = page.getByRole('region', { name: 'Un disque au hasard', exact: true });
+  await expect(spotlight.getByRole('link')).toBeVisible();
+  const suggested = await spotlight.getByRole('link').getAttribute('href');
+  await sql`update discogs_releases set statistics_fetched_at = now(), community_want = 9999, lowest_price_eur = 9999 where discogs_release_id = ${R(1)}`;
+  await expect(progress).toHaveAttribute('aria-valuenow', '6', { timeout: 12_000 });
+  for (const title of ['Les plus wanted', 'Les mieux valorisés à la vente']) {
+    await expect(
+      page.getByRole('region', { name: title, exact: true }).getByRole('listitem').first(),
+    ).toContainText('Édition 1');
+  }
+  await expect(spotlight.getByRole('link')).toHaveAttribute('href', suggested!);
+  const completedPolls = polls;
+  await page.waitForTimeout(5500);
+  expect(polls).toBe(completedPolls);
+  expect(polls).toBeGreaterThan(0);
+});
+
+test('la suggestion change au rafraîchissement et au clic sur un autre disque', async ({
+  page,
+}) => {
+  await page.goto('/');
+  const spotlight = page.getByRole('region', { name: 'Un disque au hasard', exact: true });
+  await expect(spotlight.getByRole('link')).toBeVisible();
+  const first = await spotlight.getByRole('link').getAttribute('href');
+  await page.reload();
+  await expect(spotlight.getByRole('link')).toBeVisible();
+  const second = await spotlight.getByRole('link').getAttribute('href');
+  expect(second).not.toBe(first);
+  await spotlight.getByRole('button', { name: 'Un autre disque' }).click();
+  await expect(spotlight.getByRole('link')).not.toHaveAttribute('href', second!);
+});
+
+test('le fil ouvre la collection de l’ami et disparaît après révocation', async ({ page }) => {
+  await page.goto('/');
+  const activity = page.getByRole('region', { name: 'Dans les bacs de vos amis' });
+  await expect(activity.getByText('stats_friend a ajouté à sa collection')).toBeVisible();
+  await activity.getByRole('button', { name: /Album de mon ami/ }).click();
+  await expect(page.getByRole('heading', { name: 'Album de mon ami', exact: true })).toBeVisible();
+  await expect(page.getByText('Vous consultez la collection de stats_friend.')).toBeVisible();
+  await sql`update collection_shares set revoked_at = now() where owner_id = ${friendId} and grantee_id = ${ownerId}`;
+  await page.goto('/');
+  await expect(activity.getByText('Album de mon ami')).toHaveCount(0);
+  await expect(activity.getByRole('link', { name: 'Voir mes amis' })).toBeVisible();
+});
+
+test('les nouvelles API exigent une session et ignorent un propriétaire fourni par le client', async ({
+  page,
+  request,
+}) => {
+  for (const path of ['highlights', 'spotlight']) {
+    expect((await request.get(`/api/collection/${path}`)).status()).toBe(401);
+  }
+  const response = await page.request.get(`/api/collection/highlights?userId=${friendId}`);
+  expect(response.status()).toBe(200);
+  expect((await response.json()).total).toBe(6);
 });
 
 test('les compteurs figurent sur chaque album, avec zéro distinct d’inconnu', async ({ page }) => {

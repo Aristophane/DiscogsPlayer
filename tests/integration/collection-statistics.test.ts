@@ -153,6 +153,11 @@ describe('tops personnels et compteurs', () => {
       .update(discogsReleases)
       .set({ statisticsFetchedAt: new Date(Date.now() - 25 * 3_600_000) })
       .where(eq(discogsReleases.discogsReleaseId, R(1)));
+    expect(await getCollectionHighlights(ownerId)).toMatchObject({
+      total: 8,
+      fetched: 8,
+      fresh: 7,
+    });
     await requestCollectionStatisticsRefresh(ownerId);
     const later = new Date(Date.now() + 600_000);
     await db
@@ -176,6 +181,7 @@ describe('tops personnels et compteurs', () => {
   it('ne boucle pas sur des données absentes récemment vérifiées', async () => {
     await applyReleaseStatistics({ id: Number(R(1)), title: 'Album' });
     expect(await listStaleCollectionStatistics(ownerId)).toEqual([]);
+    expect(await getCollectionHighlights(ownerId)).toMatchObject({ total: 8, fresh: 8 });
     expect((await getCollectionHighlights('00000000-0000-0000-0000-000000000000')).total).toBe(0);
   });
 });

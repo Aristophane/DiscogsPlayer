@@ -6,12 +6,13 @@
  * - la réponse porte des **éditions logiques** avec leur nombre d'exemplaires, pas une
  *   tuile par exemplaire physique (COLL-005, §17.3).
  */
-import { and, arrayOverlaps, eq, sql, type SQL } from 'drizzle-orm';
+import { and, arrayOverlaps, eq, inArray, sql, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { collectionInstances, discogsReleases } from '@/db/schema';
 import { normalizeText } from '@/modules/catalog/normalize';
 import { STATISTICS_FRESHNESS_MS } from '@/modules/catalog/service';
+import { listGrantsReceivedBy } from '@/modules/sharing/service';
 
 import { DEFAULT_SORT, decodeCursor, encodeCursor, type Cursor, type SortOption } from './cursor';
 
@@ -237,6 +238,7 @@ export type RankedRelease = Pick<
 
 /** Deux tops sur les éditions actives du propriétaire, jamais sur le catalogue global. */
 export async function getCollectionHighlights(userId: string) {
+  const threshold = new Date(Date.now() - STATISTICS_FRESHNESS_MS).toISOString();
   const ranked = (kind: 'wanted' | 'value') =>
     db
       .select({
@@ -275,12 +277,83 @@ export async function getCollectionHighlights(userId: string) {
       .select({
         total: sql<number>`count(distinct ${discogsReleases.id})::int`,
         fetched: sql<number>`count(distinct ${discogsReleases.id}) filter (where ${discogsReleases.statisticsFetchedAt} is not null)::int`,
+        fresh: sql<number>`count(distinct ${discogsReleases.id}) filter (where ${discogsReleases.statisticsFetchedAt} >= ${threshold}::timestamptz)::int`,
       })
       .from(collectionInstances)
       .innerJoin(discogsReleases, eq(discogsReleases.id, collectionInstances.releaseId))
       .where(and(...baseFilters(userId, {}))),
   ]);
-  return { wanted, valuable, total: coverage?.total ?? 0, fetched: coverage?.fetched ?? 0 };
+  return {
+    wanted,
+    valuable,
+    total: coverage?.total ?? 0,
+    fetched: coverage?.fetched ?? 0,
+    fresh: coverage?.fresh ?? 0,
+  };
+}
+
+/** Derniers ajouts des seules collections partagées avec l'utilisateur connecté. */
+export async function getFriendsActivity(userId: string) {
+  const grants = await listGrantsReceivedBy(userId);
+  if (grants.length === 0) return [];
+  const rows = await db
+    .select({
+      ownerId: collectionInstances.userId,
+      discogsReleaseId: discogsReleases.discogsReleaseId,
+      title: discogsReleases.title,
+      artists: discogsReleases.artistsText,
+      coverUrl: discogsReleases.primaryImageUrl,
+      // La première acquisition fait foi, comme dans la collection (G-19).
+      addedAt: sql<string | null>`min(${collectionInstances.dateAdded})`,
+    })
+    .from(collectionInstances)
+    .innerJoin(discogsReleases, eq(discogsReleases.id, collectionInstances.releaseId))
+    .where(
+      and(
+        inArray(
+          collectionInstances.userId,
+          grants.map((grant) => grant.ownerId),
+        ),
+        eq(collectionInstances.isActive, true),
+      ),
+    )
+    .groupBy(collectionInstances.userId, discogsReleases.id)
+    .orderBy(
+      sql`min(${collectionInstances.dateAdded}) desc nulls last`,
+      collectionInstances.userId,
+      discogsReleases.id,
+    )
+    .limit(12);
+  const usernames = new Map(grants.map((grant) => [grant.ownerId, grant.ownerUsername]));
+  return rows.map((row) => ({ ...row, ownerUsername: usernames.get(row.ownerId)! }));
+}
+
+/** Tirage uniforme par édition, sans modifier les sessions du mode Aléatoire. */
+export async function getRandomSpotlight(userId: string, previousReleaseId?: string) {
+  const [item] = await db
+    .select({
+      discogsReleaseId: discogsReleases.discogsReleaseId,
+      title: discogsReleases.title,
+      artists: discogsReleases.artistsText,
+      coverUrl: discogsReleases.primaryImageUrl,
+      year: discogsReleases.year,
+    })
+    .from(discogsReleases)
+    .where(
+      sql`exists (
+      select 1 from ${collectionInstances}
+      where ${collectionInstances.releaseId} = ${discogsReleases.id}
+        and ${collectionInstances.userId} = ${userId}::uuid
+        and ${collectionInstances.isActive} = true
+    )`,
+    )
+    // L'édition précédente passe en dernier : réutilisée seulement s'il n'y en a qu'une.
+    .orderBy(
+      sql`(${discogsReleases.discogsReleaseId} = ${previousReleaseId ?? ''}) asc`,
+      sql`random()`,
+    )
+    .limit(1);
+  return item ?? null;
 }
 
 /** Les absences sont rafraîchies au même rythme que les valeurs, sans boucle de requêtes. */
