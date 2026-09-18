@@ -6,19 +6,26 @@ import { getCurrentUser } from '@/modules/auth/current-user';
 import { CollectionBrowser } from '@/modules/collection/components/collection-browser';
 import { countCollection, listCollection, listFacets } from '@/modules/collection/service';
 import { ViewingAsBanner } from '@/modules/sharing/components/viewing-as-banner';
+import { parseSort } from '@/modules/collection/cursor';
 
 /**
  * Collection (§7.1, §7.3).
  * La première page est rendue côté serveur (§20.1) ; l'interactivité prend le relais.
  */
-export default async function CollectionPage() {
+export default async function CollectionPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ sort?: string | string[] }>;
+}) {
   const user = await getCurrentUser();
   if (!user) {
     redirect('/connexion');
   }
 
+  const query = await searchParams;
+  const sort = parseSort(typeof query.sort === 'string' ? query.sort : undefined);
   const [page, total, facets] = await Promise.all([
-    listCollection(user.activeCollectionOwnerId),
+    listCollection(user.activeCollectionOwnerId, { sort }),
     countCollection(user.activeCollectionOwnerId),
     listFacets(user.activeCollectionOwnerId),
   ]);
@@ -70,7 +77,8 @@ export default async function CollectionPage() {
         </div>
       ) : (
         <CollectionBrowser
-          key={user.activeCollectionOwnerId}
+          key={`${user.activeCollectionOwnerId}:${sort}`}
+          initialSort={sort}
           initialItems={page.items}
           initialCursor={page.nextCursor}
           total={total}

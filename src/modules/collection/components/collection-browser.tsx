@@ -22,18 +22,20 @@ export function CollectionBrowser({
   initialCursor,
   total,
   facets,
+  initialSort = 'date_added_desc',
 }: {
   initialItems: CollectionItem[];
   initialCursor: string | null;
   total: number;
   facets: { genres: Facet[]; styles: Facet[] };
+  initialSort?: SortOption;
 }) {
   const [items, setItems] = useState(initialItems);
   const [cursor, setCursor] = useState(initialCursor);
   const [query, setQuery] = useState('');
   const [genres, setGenres] = useState<string[]>([]);
   const [styles, setStyles] = useState<string[]>([]);
-  const [sort, setSort] = useState<SortOption>('date_added_desc');
+  const [sort, setSort] = useState<SortOption>(initialSort);
   const [showFilters, setShowFilters] = useState(false);
   const [error, setError] = useState(false);
   const [pending, startTransition] = useTransition();

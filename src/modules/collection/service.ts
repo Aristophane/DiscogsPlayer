@@ -338,7 +338,7 @@ export async function getFriendsActivity(userId: string) {
       collectionInstances.userId,
       discogsReleases.id,
     )
-    .limit(5);
+    .limit(6);
   const usernames = new Map(grants.map((grant) => [grant.ownerId, grant.ownerUsername]));
   return rows.map((row) => ({ ...row, ownerUsername: usernames.get(row.ownerId)! }));
 }

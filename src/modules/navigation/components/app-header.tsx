@@ -14,7 +14,7 @@ import { Logo } from '@/lib/ui/logo';
  * pour l'accès direct depuis n'importe quel écran, y compris la fiche album et l'import,
  * que la barre basse ne couvre pas. Radio est un lien actif depuis le Lot 6 (ADR-0006).
  *
- * Menu déroulant sous `md:` : les six liens, dont Amis, doivent rester accessibles
+ * Menu déroulant sous `lg:` : les six liens, dont Amis, doivent rester accessibles
  * sans défilement horizontal sur mobile et sur les écrans de 640 px.
  */
 const LINKS: { href: string; labelKey: MessageKey }[] = [
@@ -67,7 +67,7 @@ export function AppHeader({ collectionSwitcher }: { collectionSwitcher: ReactNod
 
   return (
     <header ref={headerRef} className="sticky top-0 z-30 border-b border-border bg-background">
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
         <Link
           href="/"
           className="flex shrink-0 items-center gap-2 text-sm font-semibold tracking-tight sm:text-base"
@@ -76,7 +76,14 @@ export function AppHeader({ collectionSwitcher }: { collectionSwitcher: ReactNod
           {t('app.name')}
         </Link>
 
-        <nav aria-label={t('app.name')} className="hidden items-center gap-1 md:flex">
+        {collectionSwitcher ? (
+          <div className="min-w-0 flex-1 sm:max-w-64">{collectionSwitcher}</div>
+        ) : null}
+
+        <nav
+          aria-label={t('app.name')}
+          className="ml-auto hidden shrink-0 items-center gap-1 lg:flex"
+        >
           {LINKS.map((link) => {
             const active = pathname === link.href;
 
@@ -101,23 +108,17 @@ export function AppHeader({ collectionSwitcher }: { collectionSwitcher: ReactNod
           aria-expanded={mobileOpen}
           aria-controls="mobile-nav-panel"
           aria-label={mobileOpen ? t('nav.menu.close') : t('nav.menu.open')}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border text-base md:hidden"
+          className="ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border text-base lg:hidden"
         >
           <span aria-hidden="true">{mobileOpen ? '✕' : '☰'}</span>
         </button>
       </div>
 
-      {collectionSwitcher ? (
-        <div className="border-t border-border bg-surface/40">
-          <div className="mx-auto w-full max-w-6xl px-4 py-2 sm:px-6">{collectionSwitcher}</div>
-        </div>
-      ) : null}
-
       {mobileOpen ? (
         <nav
           id="mobile-nav-panel"
           aria-label={t('app.name')}
-          className="flex flex-col gap-1 border-t border-border px-4 py-2 md:hidden"
+          className="flex flex-col gap-1 border-t border-border px-4 py-2 lg:hidden"
         >
           {LINKS.map((link) => {
             const active = pathname === link.href;

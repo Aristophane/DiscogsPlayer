@@ -9,12 +9,16 @@ import { PlaybackProvider } from '@/modules/playback/playback-context';
 import { getCurrentUser } from '@/modules/auth/current-user';
 import { listGrantsReceivedBy } from '@/modules/sharing/service';
 import { CollectionSwitcher } from '@/modules/sharing/components/collection-switcher';
+import { InstallProvider } from '@/modules/install/components/install-provider';
 
 import './globals.css';
 
 export const metadata: Metadata = {
   title: `${t('app.name')} — ${t('app.subtitle')}`,
   description: t('app.tagline'),
+  applicationName: t('app.name'),
+  appleWebApp: { capable: true, title: t('app.name'), statusBarStyle: 'default' },
+  icons: { apple: '/icons/apple-touch-icon.png' },
 };
 
 export const viewport: Viewport = {
@@ -37,35 +41,37 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           pages : un <iframe> YouTube ou Spotify est détruit à chaque navigation s'il vit
           dans un segment de route (SPEC-GAPS G-17).
         */}
-        <PlaybackProvider>
-          {/* Fond d'ambiance + disque « Now Spinning » (demande produit 2026-09-03) :
+        <InstallProvider>
+          <PlaybackProvider>
+            {/* Fond d'ambiance + disque « Now Spinning » (demande produit 2026-09-03) :
               avant l'en-tête pour rester sous lui à z-index égal, l'ordre du DOM ne
               change rien d'autre — la pile négative du composant le maintient sous
               tout contenu normal quel que soit cet ordre. */}
-          <NowSpinningBackground />
-          <AppHeader
-            collectionSwitcher={
-              user ? (
-                <CollectionSwitcher
-                  ownId={user.id}
-                  activeOwnerId={user.activeCollectionOwnerId}
-                  friends={friends.map(({ ownerId, ownerUsername }) => ({
-                    ownerId,
-                    ownerUsername,
-                  }))}
-                />
-              ) : null
-            }
-          />
-          {/*
+            <NowSpinningBackground />
+            <AppHeader
+              collectionSwitcher={
+                user ? (
+                  <CollectionSwitcher
+                    ownId={user.id}
+                    activeOwnerId={user.activeCollectionOwnerId}
+                    friends={friends.map(({ ownerId, ownerUsername }) => ({
+                      ownerId,
+                      ownerUsername,
+                    }))}
+                  />
+                ) : null
+              }
+            />
+            {/*
             L'espace réservé suit la hauteur réelle de la barre de lecture (variable CSS
             posée par `PlayerBar`), pas une valeur figée : une vidéo YouTube affichée fait
             grossir la barre bien au-delà d'un padding fixe, ce qui recouvrait des boutons
             en bas de page (défaut réel constaté en test e2e sur mobile).
           */}
-          <div className="flex flex-1 flex-col pb-[var(--player-bar-height,0px)]">{children}</div>
-          <PlayerBar />
-        </PlaybackProvider>
+            <div className="flex flex-1 flex-col pb-[var(--player-bar-height,0px)]">{children}</div>
+            <PlayerBar />
+          </PlaybackProvider>
+        </InstallProvider>
       </body>
     </html>
   );

@@ -4,6 +4,7 @@ import { getFriendsActivity } from '../service';
 import { coverProxyUrl } from '../cover';
 import { AlbumCover } from './album-cover';
 import { PersonalReleaseLink } from './personal-release-link';
+import { FriendAdditionsLink } from '@/modules/sharing/components/friend-additions-link';
 
 const dateFormat = new Intl.DateTimeFormat('fr-FR', {
   day: 'numeric',
@@ -29,9 +30,9 @@ export async function FriendsActivity({
       {items.length === 0 ? (
         <p className="py-6 text-sm leading-relaxed text-muted">{t('home.activity.empty')}</p>
       ) : (
-        <ol className="mt-4 divide-y divide-border">
+        <ol className="mt-5 grid grid-cols-2 items-start gap-x-4 gap-y-6 lg:grid-cols-3">
           {items.map((item) => (
-            <li key={`${item.ownerId}:${item.discogsReleaseId}`} className="py-4">
+            <li key={`${item.ownerId}:${item.discogsReleaseId}`} className="min-w-0">
               <p className="mb-2 text-xs text-muted">
                 {t('home.activity.added', { username: item.ownerUsername })}
               </p>
@@ -39,8 +40,9 @@ export async function FriendsActivity({
                 releaseId={item.discogsReleaseId}
                 ownerId={item.ownerId}
                 switchToOwn={activeOwnerId !== item.ownerId}
+                layout="cover"
               >
-                <div className="relative aspect-square w-32 shrink-0 overflow-hidden rounded-md bg-surface sm:w-40">
+                <div className="relative aspect-square w-full overflow-hidden rounded-md bg-surface">
                   <AlbumCover
                     src={coverProxyUrl(item.coverUrl)}
                     title={item.title}
@@ -61,6 +63,11 @@ export async function FriendsActivity({
                   </p>
                 </div>
               </PersonalReleaseLink>
+              <FriendAdditionsLink
+                ownerId={item.ownerId}
+                username={item.ownerUsername}
+                active={activeOwnerId === item.ownerId}
+              />
             </li>
           ))}
         </ol>

@@ -42,13 +42,10 @@ export function CollectionSwitcher({
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="flex w-full min-w-0 items-center gap-3 sm:w-auto">
-          <label
-            htmlFor="active-collection"
-            className="max-w-24 shrink-0 text-xs font-medium text-muted sm:max-w-none sm:text-sm"
-          >
+    <div className="relative min-w-0">
+      <div className="min-w-0">
+        <div className="min-w-0">
+          <label htmlFor="active-collection" className="sr-only">
             {t('collection.switcher.label')}
           </label>
           <select
@@ -57,7 +54,7 @@ export function CollectionSwitcher({
             onChange={(event) => switchCollection(event.target.value)}
             disabled={pending}
             aria-busy={pending}
-            className="min-h-11 w-full min-w-0 flex-1 truncate rounded-md border border-border bg-background px-3 py-2 text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current disabled:opacity-50 sm:w-80"
+            className="min-h-11 w-full min-w-0 truncate rounded-md border border-border bg-background px-2 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current disabled:opacity-50 sm:px-3"
           >
             <option value={ownId}>{t('collection.switcher.own')}</option>
             {friends.length > 0 ? (
@@ -72,13 +69,16 @@ export function CollectionSwitcher({
           </select>
         </div>
         {pending ? (
-          <p role="status" className="py-3 text-sm text-muted">
+          <p role="status" className="sr-only">
             {t('sharing.received.switching')}
           </p>
         ) : null}
       </div>
       {error ? (
-        <p role="alert" className="text-sm text-red-500">
+        <p
+          role="alert"
+          className="absolute top-full left-0 mt-2 w-full rounded-md border border-border bg-background p-2 text-xs text-red-600 dark:text-red-400"
+        >
           {t('sharing.error')}
         </p>
       ) : null}

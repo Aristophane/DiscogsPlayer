@@ -75,7 +75,7 @@ afterAll(async () => {
 });
 
 describe('découvertes de l’accueil', () => {
-  it('limite le fil aux cinq actualités les plus récentes', async () => {
+  it('limite le fil aux six actualités les plus récentes', async () => {
     await db.insert(collectionShares).values({ ownerId: friend, granteeId: viewer });
     await db.insert(collectionInstances).values(
       releases.slice(3).map((releaseId, index) => ({
@@ -86,7 +86,10 @@ describe('découvertes de l’accueil', () => {
       })),
     );
     const feed = await getFriendsActivity(viewer);
-    expect(feed.map((item) => item.discogsReleaseId)).toEqual(releaseIds.slice(3).reverse());
+    expect(feed.map((item) => item.discogsReleaseId)).toEqual([
+      ...releaseIds.slice(3).reverse(),
+      releaseIds[1],
+    ]);
   });
 
   it('affiche seulement les ajouts des amis ayant partagé leur collection, triés et dédupliqués', async () => {

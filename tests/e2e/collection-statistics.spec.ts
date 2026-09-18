@@ -13,7 +13,7 @@ let token: string;
 async function cleanup() {
   await sql`delete from tasks where dedupe_key like 'discogs.fetch_statistics:test-stats-release-%'`;
   await sql`delete from users where discogs_user_id in ${sql(identities)}`;
-  await sql`delete from discogs_releases where discogs_release_id in ${sql(Array.from({ length: 7 }, (_, i) => R(i + 1)))}`;
+  await sql`delete from discogs_releases where discogs_release_id in ${sql(Array.from({ length: 13 }, (_, i) => R(i + 1)))}`;
 }
 
 test.beforeAll(async () => {
@@ -25,13 +25,13 @@ test.beforeAll(async () => {
   ownerId = owner!.id as string;
   friendId = friend!.id as string;
   await sql`insert into collection_shares (owner_id, grantee_id) values (${friendId}, ${ownerId})`;
-  for (let n = 1; n <= 7; n++) {
+  for (let n = 1; n <= 13; n++) {
     const [release] = await sql`insert into discogs_releases
       (discogs_release_id, title, artists_text, title_normalized, community_have, community_want, lowest_price_eur, num_for_sale, details_fetched_at, statistics_fetched_at)
       values (${R(n)}, ${n === 7 ? 'Album de mon ami' : `Édition ${n}`}, 'Artiste des statistiques', ${`edition ${n}`},
       ${n === 1 ? null : n * 10}, ${n === 1 ? 0 : n * 100}, ${n * 25.5}, 2, now(), now()) returning id`;
-    await sql`insert into collection_instances (user_id, release_id, discogs_instance_id) values
-      (${n === 7 ? friendId : ownerId}, ${release!.id}, ${`test-stats-instance-${n}`})`;
+    await sql`insert into collection_instances (user_id, release_id, discogs_instance_id, date_added) values
+      (${n >= 7 ? friendId : ownerId}, ${release!.id}, ${`test-stats-instance-${n}`}, ${new Date(Date.UTC(2026, 0, 20 - n))})`;
   }
   token = randomBytes(32).toString('base64url');
   await sql`insert into sessions (user_id, token_hash, expires_at) values
@@ -139,7 +139,7 @@ test('la suggestion change au rafraîchissement et au clic sur un autre disque',
 test('le fil ouvre la collection de l’ami et disparaît après révocation', async ({ page }) => {
   await page.goto('/');
   const activity = page.getByRole('region', { name: 'Dans les bacs de vos amis' });
-  await expect(activity.getByText('stats_friend a ajouté à sa collection')).toBeVisible();
+  await expect(activity.getByText('stats_friend a ajouté à sa collection')).toHaveCount(6);
   await activity.getByRole('button', { name: /Album de mon ami/ }).click();
   await expect(page.getByRole('heading', { name: 'Album de mon ami', exact: true })).toBeVisible();
   await expect(page.getByText('Vous consultez la collection de stats_friend.')).toBeVisible();
@@ -237,4 +237,188 @@ test('les trois nouveaux tris ordonnent les albums de la collection', async ({ p
     ).toContainText('Édition 1');
   }
   await expect(page.getByText(/Valeur marchande : prix minimum/)).toBeVisible();
+});
+
+test('le sélecteur est à côté du logo, hors du burger, même à 320 px', async ({ page }) => {
+  await page.goto('/');
+  const header = page.getByRole('banner');
+  const switcher = header.getByRole('combobox', { name: 'Collection affichée' });
+  const widths = [page.viewportSize()!.width, 320];
+  for (const width of widths) {
+    await page.setViewportSize({ width, height: 900 });
+    const logo = await header.getByRole('link', { name: 'Dig', exact: true }).boundingBox();
+    const select = await switcher.boundingBox();
+    expect(logo).not.toBeNull();
+    expect(select).not.toBeNull();
+    expect(select!.x).toBeGreaterThan(logo!.x + logo!.width);
+    expect(Math.abs(select!.y + select!.height / 2 - logo!.y - logo!.height / 2)).toBeLessThan(2);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+  }
+  await header.getByRole('button', { name: 'Ouvrir le menu' }).click();
+  await expect(switcher).toBeVisible();
+  await expect(page.locator('#mobile-nav-panel').getByRole('combobox')).toHaveCount(0);
+  await switcher.selectOption(friendId);
+  await expect(switcher).toHaveValue(friendId);
+});
+
+test('six pochettes et Voir plus ouvrent les ajouts récents de l’ami', async ({ page }) => {
+  await page.goto('/');
+  const activity = page.getByRole('region', { name: 'Dans les bacs de vos amis' });
+  const items = activity.getByRole('listitem');
+  await expect(items).toHaveCount(6);
+  const first = (await items.nth(0).boundingBox())!;
+  const second = (await items.nth(1).boundingBox())!;
+  const third = (await items.nth(2).boundingBox())!;
+  expect(second.y).toBe(first.y);
+  expect(second.x).toBeGreaterThan(first.x);
+  if (page.viewportSize()!.width < 1024) {
+    expect(third.x).toBe(first.x);
+    expect(third.y).toBeGreaterThan(first.y);
+  } else {
+    expect(third.y).toBe(first.y);
+  }
+  await activity.getByRole('button', { name: 'Voir les ajouts de stats_friend' }).first().click();
+  await expect(page).toHaveURL(/\/collection\?sort=date_added_desc$/);
+  await expect(page.getByRole('combobox', { name: 'Collection affichée' })).toHaveValue(friendId);
+  const sort = page.getByRole('combobox', { name: 'Trier', exact: true });
+  await expect(sort).toHaveValue('date_added_desc');
+  const albums = page.getByRole('main').getByRole('list').getByRole('listitem');
+  await expect(albums).toHaveCount(7);
+  await expect(albums.first()).toContainText('Album de mon ami');
+  await expect(albums.last()).toContainText('Édition 13');
+  await sort.selectOption('value_desc');
+  await expect(albums.first()).toContainText('Édition 13');
+  await page.getByRole('banner').getByRole('link', { name: 'Dig', exact: true }).click();
+  await activity.getByRole('link', { name: 'Voir les ajouts de stats_friend' }).first().click();
+  await expect(sort).toHaveValue('date_added_desc');
+  await expect(albums.first()).toContainText('Album de mon ami');
+});
+
+test('le tri initial de la collection suit le lien et ignore les valeurs invalides', async ({
+  page,
+}) => {
+  await page.goto('/collection?sort=value_desc');
+  await expect(page.getByRole('combobox', { name: 'Trier', exact: true })).toHaveValue(
+    'value_desc',
+  );
+  await expect(page.getByRole('main').getByRole('listitem').first()).toContainText('Édition 6');
+  await page.goto('/collection?sort=invalid');
+  await expect(page.getByRole('combobox', { name: 'Trier', exact: true })).toHaveValue(
+    'date_added_desc',
+  );
+  await expect(page.getByRole('main').getByRole('listitem').first()).toContainText('Édition 1');
+});
+
+test('le manifeste public et les icônes rendent Dig installable avec son logo', async ({
+  page,
+  request,
+}) => {
+  const response = await request.get('/manifest.webmanifest');
+  expect(response.ok()).toBe(true);
+  const manifest = await response.json();
+  expect(manifest).toMatchObject({
+    name: 'Dig',
+    start_url: '/',
+    scope: '/',
+    display: 'standalone',
+  });
+  expect(manifest.icons).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ sizes: '192x192', purpose: 'any' }),
+      expect.objectContaining({ sizes: '512x512', purpose: 'any' }),
+      expect.objectContaining({ sizes: '512x512', purpose: 'maskable' }),
+    ]),
+  );
+  for (const icon of manifest.icons) {
+    const image = await request.get(icon.src);
+    expect(image.ok()).toBe(true);
+    expect(image.headers()['content-type']).toContain('image/png');
+    expect((await image.body()).length).toBeGreaterThan(1000);
+  }
+  await page.goto('/parametres');
+  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute(
+    'href',
+    '/manifest.webmanifest',
+  );
+  await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute(
+    'href',
+    '/icons/apple-touch-icon.png',
+  );
+  expect((await request.get('/icons/apple-touch-icon.png')).ok()).toBe(true);
+});
+
+test('l’invitation native capturée à l’accueil reste disponible dans les paramètres', async ({
+  page,
+}) => {
+  await page.goto('/');
+  // Attendre l'hydratation avant d'émettre l'événement fourni habituellement par le navigateur.
+  await page.getByRole('region', { name: 'Un disque au hasard' }).getByRole('link').waitFor();
+  await page.evaluate(() => {
+    const event = new Event('beforeinstallprompt', { cancelable: true });
+    Object.defineProperties(event, {
+      prompt: {
+        value: async () => {
+          document.documentElement.dataset.installPrompted = 'yes';
+        },
+      },
+      userChoice: { value: Promise.resolve({ outcome: 'accepted' }) },
+    });
+    window.dispatchEvent(event);
+  });
+  const header = page.getByRole('banner');
+  const menu = header.getByRole('button', { name: 'Ouvrir le menu' });
+  if (await menu.isVisible()) await menu.click();
+  await header.getByRole('link', { name: 'Paramètres', exact: true }).click();
+  await page.getByRole('button', { name: 'Installer l’application', exact: true }).click();
+  await expect(
+    page.getByText('Installation demandée. Votre navigateur termine l’installation.'),
+  ).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('data-install-prompted', 'yes');
+  await page.evaluate(() => window.dispatchEvent(new Event('appinstalled')));
+  await expect(page.getByText('L’application est installée sur cet appareil.')).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Installer l’application', exact: true }),
+  ).toHaveCount(0);
+});
+
+test('sans invitation native, le bouton explique l’installation manuelle', async ({ page }) => {
+  await page.goto('/parametres');
+  await page.getByRole('button', { name: 'Installer l’application', exact: true }).click();
+  await expect(page.getByText(/Dans le menu de votre navigateur, cherchez/)).toBeVisible();
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'userAgent', { value: 'iPhone Safari' });
+  });
+  await page.reload();
+  await page.getByRole('button', { name: 'Installer l’application', exact: true }).click();
+  await expect(page.getByText(/Dans Safari, ouvrez le menu Partager/)).toBeVisible();
+});
+
+test('une invitation refusée peut être remplacée et une erreur propose les étapes manuelles', async ({
+  page,
+}) => {
+  await page.goto('/parametres');
+  const install = page.getByRole('button', { name: 'Installer l’application', exact: true });
+  await install.click();
+  for (const failure of [false, true]) {
+    await page.evaluate((failure) => {
+      const event = new Event('beforeinstallprompt', { cancelable: true });
+      Object.defineProperties(event, {
+        prompt: {
+          value: async () => {
+            if (failure) throw new Error('Unavailable');
+          },
+        },
+        userChoice: { value: Promise.resolve({ outcome: 'dismissed' }) },
+      });
+      window.dispatchEvent(event);
+    }, failure);
+    await install.click();
+    await expect(
+      page.getByText(failure ? /L’installation n’a pas pu démarrer/ : /Installation annulée/),
+    ).toBeVisible();
+    await expect(install).toBeEnabled();
+  }
+  await expect(page.getByText(/Dans le menu de votre navigateur, cherchez/)).toBeVisible();
 });

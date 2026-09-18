@@ -6,6 +6,7 @@ import { SignOutButton } from '@/modules/auth/components/sign-out-button';
 import { SpotifyPreferenceToggle } from '@/modules/auth/components/spotify-preference';
 import { getVideoCoverage } from '@/modules/collection/service';
 import { SharingManager } from '@/modules/sharing/components/sharing-manager';
+import { InstallApp } from '@/modules/install/components/install-app';
 
 /**
  * Paramètres (§7.1). Compte, déconnexion, préférence Spotify (ADR-0006).
@@ -52,6 +53,8 @@ export default async function ParametresPage() {
       </section>
 
       <SpotifyPreferenceToggle initial={user.spotifyEnabled} variant="settings" />
+
+      <InstallApp />
 
       <SharingManager activeCollectionOwnerId={user.activeCollectionOwnerId} />
 

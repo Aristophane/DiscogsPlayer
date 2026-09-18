@@ -142,6 +142,24 @@ export const fr = {
   'home.activity.empty':
     'Les nouveaux disques de vos amis apparaîtront ici lorsqu’ils partageront leur collection avec vous.',
   'home.activity.friends': 'Voir mes amis',
+  'home.activity.more': 'Voir plus',
+  'home.activity.moreLabel': 'Voir les ajouts de {username}',
+  'install.title': 'Dig sur votre appareil',
+  'install.description': 'Retrouvez votre collection depuis une icône sur votre écran d’accueil.',
+  'install.action': 'Installer l’application',
+  'install.pending': 'Installation en cours…',
+  'install.installed': 'L’application est installée sur cet appareil.',
+  'install.accepted': 'Installation demandée. Votre navigateur termine l’installation.',
+  'install.dismissed':
+    'Installation annulée. Vous pouvez la relancer depuis le menu de votre navigateur.',
+  'install.error': 'L’installation n’a pas pu démarrer. Utilisez les étapes ci-dessous.',
+  'install.guide.ios':
+    'Dans Safari, ouvrez le menu Partager, puis « Sur l’écran d’accueil » et confirmez avec « Ajouter ». L’icône Dig apparaîtra sur votre appareil.',
+  'install.guide.mac':
+    'Dans Safari, choisissez Fichier → Ajouter au Dock, puis confirmez. Vous retrouverez Dig dans votre Dock.',
+  'install.guide.browser':
+    'Dans le menu de votre navigateur, cherchez « Installer l’application » ou « Ajouter à l’écran d’accueil ». Si cette option n’apparaît pas, ouvrez Dig dans Chrome, Edge ou Safari.',
+  'install.guide.insecure': 'Ouvrez Dig avec une adresse HTTPS pour l’installer sur cet appareil.',
   'home.spotlight.title': 'Un disque au hasard',
   'home.spotlight.description': 'Une idée d’écoute dans la collection que vous parcourez.',
   'home.spotlight.another': 'Un autre disque',
