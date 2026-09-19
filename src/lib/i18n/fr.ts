@@ -35,7 +35,19 @@ export const fr = {
   'crate.originCoverage': '{known} disque(s) avec une origine sur {total}',
   'crate.refreshOrigins': 'Actualiser les bacs',
   'crate.artistOrigin': 'Origine : {countries}',
-  'crate.originSource': 'Source de l’origine de l’artiste {index} sur Wikidata',
+  'crate.originSource': 'Source de l’origine de l’artiste {index} sur {source}',
+  'crate.originProgress':
+    'Artistes : {known} identifiés · {pending} à rechercher · {unavailable} sans origine trouvée · {failed} recherches en erreur',
+  'crate.originsPending':
+    'La recherche se fait en arrière-plan. Les disques en attente restent dans « Origine inconnue ».',
+  'crate.originsFailed':
+    'Certaines recherches ont échoué ou attendent une reprise. Si ce nombre persiste, actualisez les bacs plus tard et vérifiez le service de traitement.',
+  'crate.originsWorker':
+    'Le service de traitement doit être mis à jour et redémarré pour rechercher les origines.',
+  'crate.originsReady':
+    'De nouvelles origines sont disponibles. Actualisez les bacs pour les ranger.',
+  'crate.originsDisconnected':
+    'Le suivi est momentanément indisponible. Nouvelle tentative dans quelques secondes.',
   'crate.yearHint': 'L’année est celle de l’édition présente dans votre collection.',
   'crate.scene': 'Bac à vinyle 3D',
   'crate.gesture': 'Faites défiler ou glissez les pochettes pour fouiller le bac.',

@@ -12,6 +12,27 @@ import { moduleLogger } from '@/lib/logger';
 
 const log = moduleLogger('worker');
 
+export async function getArtistOriginTaskStates(ids: string[]) {
+  if (!ids.length) return [];
+  return db
+    .selectDistinctOn([tasks.dedupeKey], {
+      key: tasks.dedupeKey,
+      status: tasks.status,
+      errorCode: tasks.lastErrorCode,
+    })
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.type, 'catalog.fetch_artist_origin'),
+        inArray(
+          tasks.dedupeKey,
+          ids.map((id) => `catalog.fetch_artist_origin:${id}`),
+        ),
+      ),
+    )
+    .orderBy(tasks.dedupeKey, sql`${tasks.createdAt} desc`);
+}
+
 export type TaskRow = {
   id: string;
   type: string;

@@ -1,7 +1,10 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sql } from '@/db/client';
 import { getCrateCollection } from '@/modules/collection/crate-service';
-import { requestCollectionArtistOrigins } from '@/modules/sync/artist-origins';
+import {
+  getCollectionOriginProgress,
+  requestCollectionArtistOrigins,
+} from '@/modules/sync/artist-origins';
 import { runTask } from '@/modules/sync/handlers';
 import { ArtistOriginError } from '@/modules/providers/wikidata/artist-origin';
 import { groupCrateRecords } from '@/modules/collection/crate';
@@ -49,6 +52,55 @@ const task = (id: string) => ({
 });
 
 describe('enrichissement partagé des origines', () => {
+  it('retente les anciens résultats vides sans attendre trente jours et respecte ensuite le backoff', async () => {
+    await sql`update discogs_artists set origin_checked_at = now(), origin_next_check_at = now() + interval '30 days' where discogs_artist_id = ${artistIds[0]!}`;
+    await requestCollectionArtistOrigins(owner);
+    const lookup = vi.fn().mockRejectedValue(new ArtistOriginError(true));
+    await expect(runTask(task(artistIds[0]!), undefined, { lookup })).rejects.toThrow();
+    expect(lookup).toHaveBeenCalledTimes(1);
+    await sql`delete from tasks where type = 'catalog.fetch_artist_origin' and payload->>'discogsArtistId' = ${artistIds[0]!}`;
+    await requestCollectionArtistOrigins(owner);
+    expect(
+      await sql`select id from tasks where type = 'catalog.fetch_artist_origin' and payload->>'discogsArtistId' = ${artistIds[0]!}`,
+    ).toHaveLength(0);
+    await runTask(task(artistIds[0]!), undefined, {
+      lookup: async () => ({ countries: [], sourceUrl: null }),
+    });
+    const [artist] =
+      await sql`select origin_next_check_at from discogs_artists where discogs_artist_id = ${artistIds[0]!}`;
+    expect(new Date(artist!.origin_next_check_at).getTime() - Date.now()).toBeLessThanOrEqual(
+      86_400_000,
+    );
+  });
+  it('distingue attente, recherche sans résultat et worker incompatible, avec isolation de la collection', async () => {
+    await requestCollectionArtistOrigins(owner);
+    expect(await getCollectionOriginProgress(owner)).toMatchObject({
+      total: 2,
+      pending: 2,
+      known: 0,
+      unavailable: 0,
+      failed: 0,
+    });
+    await runTask(task(artistIds[0]!), undefined, {
+      lookup: async () => ({ countries: [], sourceUrl: null }),
+    });
+    await sql`update tasks set status = 'completed' where type = 'catalog.fetch_artist_origin' and payload->>'discogsArtistId' = ${artistIds[0]!}`;
+    await sql`update tasks set status = 'failed', last_error_code = 'TASK_TYPE_UNKNOWN' where type = 'catalog.fetch_artist_origin' and payload->>'discogsArtistId' = ${artistIds[1]!}`;
+    expect(await getCollectionOriginProgress(owner)).toMatchObject({
+      total: 2,
+      pending: 0,
+      unavailable: 1,
+      failed: 1,
+      workerUpdateRequired: true,
+    });
+    expect(await getCollectionOriginProgress(friend)).toMatchObject({
+      total: 2,
+      pending: 1,
+      unavailable: 1,
+      failed: 0,
+      workerUpdateRequired: false,
+    });
+  });
   it('enfile uniquement les artistes actifs de la collection et déduplique les éditions/visites', async () => {
     await requestCollectionArtistOrigins(owner);
     await requestCollectionArtistOrigins(owner);

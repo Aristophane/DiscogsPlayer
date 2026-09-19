@@ -1,0 +1,1 @@
+ALTER TABLE "discogs_artists" ADD COLUMN "origin_lookup_version" integer DEFAULT 0 NOT NULL;

@@ -16,12 +16,20 @@ import { t } from '@/lib/i18n';
 import { groupCrateRecords, type CrateGroup, type CrateGrouping, type CrateRecord } from '../crate';
 import { coverProxyUrl } from '../cover';
 import { AlbumCover } from './album-cover';
+import type { OriginProgress } from '../origin-progress';
+import { OriginProgressStatus } from './origin-progress';
 import styles from './crate-browser.module.css';
 
 const GROUPINGS: CrateGrouping[] = ['genre', 'year', 'continent'];
 const clamp = (value: number, max: number) => Math.max(0, Math.min(value, max));
 
-export function CrateBrowser({ records }: { records: CrateRecord[] }) {
+export function CrateBrowser({
+  records,
+  originProgress,
+}: {
+  records: CrateRecord[];
+  originProgress?: OriginProgress;
+}) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [grouping, setGrouping] = useState<CrateGrouping>('genre');
@@ -56,6 +64,9 @@ export function CrateBrowser({ records }: { records: CrateRecord[] }) {
         <p>{t(`crate.${grouping}Hint`)}</p>
         {grouping === 'continent' ? (
           <div className="flex flex-wrap items-center gap-x-3">
+            {originProgress ? (
+              <OriginProgressStatus key={JSON.stringify(originProgress)} initial={originProgress} />
+            ) : null}
             <span>
               {t('crate.originCoverage', {
                 known: records.filter((record) => record.originCountries?.length).length,
@@ -398,9 +409,15 @@ function CrateExplorer({ groups, grouping }: { groups: CrateGroup[]; grouping: C
                         target="_blank"
                         rel="noreferrer"
                         className="ml-2 inline-flex min-h-11 items-center underline"
-                        aria-label={t('crate.originSource', { index: index + 1 })}
+                        aria-label={t('crate.originSource', {
+                          index: index + 1,
+                          source: url.startsWith('https://www.discogs.com/')
+                            ? 'Discogs'
+                            : 'Wikidata',
+                        })}
                       >
-                        Wikidata{record.originSourceUrls.length > 1 ? ` ${index + 1}` : ''}
+                        {url.startsWith('https://www.discogs.com/') ? 'Discogs' : 'Wikidata'}
+                        {record.originSourceUrls.length > 1 ? ` ${index + 1}` : ''}
                       </a>
                     ))
                   : null}

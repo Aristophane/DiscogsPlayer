@@ -160,6 +160,22 @@ const releaseSchema = z.object({
 export type CollectionPage = z.infer<typeof collectionPageSchema>;
 export type ReleaseDetails = z.infer<typeof releaseSchema>;
 
+const artistSchema = z.object({
+  id: z.number().int().positive(),
+  name: z.string(),
+  profile: z.string().optional().default(''),
+});
+
+/** Uses the same authenticated, rate-limited transport as collection imports. */
+export async function getDiscogsArtist(id: string) {
+  if (!/^[1-9]\d*$/.test(id)) throw new Error('Invalid Discogs artist ID');
+  return parseOrThrow(
+    artistSchema,
+    await requestJson(`${getEnv().DISCOGS_API_BASE_URL}/artists/${id}`, undefined),
+    'DISCOGS_ARTIST_SHAPE',
+  );
+}
+
 export type DiscogsApi = {
   getCollectionPage(
     tokens: OAuthTokenPair,

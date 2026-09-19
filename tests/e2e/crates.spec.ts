@@ -6,7 +6,7 @@ import postgres from 'postgres';
 const sql = postgres(process.env.DATABASE_URL ?? '', { max: 2 });
 const identities = ['test-crates-owner', 'test-crates-friend'];
 const releaseId = (n: number) => `test-crates-release-${n}`;
-const artistId = (n: number) => `test-crates-artist-${n}`;
+const artistId = (n: number) => `99882210${n}`;
 const editions = [
   { title: 'Aube Jazz', genres: ['Jazz', 'Blues'], year: 1998, country: 'France' },
   { title: 'Bleu Minuit', genres: ['Jazz'], year: 1998, country: 'Italy' },
@@ -22,6 +22,7 @@ let friendId: string;
 let token: string;
 
 async function cleanup() {
+  await sql`delete from tasks where type = 'catalog.fetch_artist_origin' and payload->>'discogsArtistId' in ${sql(editions.map((_, index) => artistId(index + 1)))}`;
   await sql`delete from tasks where dedupe_key like 'discogs.fetch_statistics:test-crates-release-%'`;
   await sql`delete from users where discogs_user_id in ${sql(identities)}`;
   await sql`delete from discogs_releases where discogs_release_id in ${sql(editions.map((_, index) => releaseId(index + 1)))}`;
@@ -82,8 +83,8 @@ test.beforeAll(async () => {
         ${number === 6 ? null : `https://i.discogs.com/test-crates-${number}.jpg`}, now(), now()) returning id`;
     const origins = number === 1 ? ['Senegal'] : edition.country ? [edition.country] : [];
     const [artist] =
-      await sql`insert into discogs_artists (discogs_artist_id, name, name_normalized, origin_countries, origin_source_url, origin_checked_at, origin_next_check_at)
-      values (${artistId(number)}, 'Atelier Quartet', 'atelier quartet', ${origins}, ${origins.length ? 'https://www.wikidata.org/wiki/Q1' : null}, now(), now() + interval '30 days') returning id`;
+      await sql`insert into discogs_artists (discogs_artist_id, name, name_normalized, origin_countries, origin_source_url, origin_checked_at, origin_next_check_at, origin_lookup_version)
+      values (${artistId(number)}, 'Atelier Quartet', 'atelier quartet', ${origins}, ${origins.length ? 'https://www.wikidata.org/wiki/Q1' : null}, now(), now() + interval '30 days', 2) returning id`;
     await sql`insert into discogs_release_artists (release_id, artist_id, position) values (${release!.id}, ${artist!.id}, 0)`;
     await sql`insert into collection_instances (user_id, release_id, discogs_instance_id, date_added, is_active)
       values (${number === 7 ? friendId : ownerId}, ${release!.id}, ${`test-crates-instance-${number}`},
@@ -124,6 +125,41 @@ test.beforeEach(async ({ page }) => {
 test.afterAll(async () => {
   await cleanup();
   await sql.end();
+});
+
+test('le suivi des origines progresse sans interrompre les pochettes et expose la source Discogs', async ({
+  page,
+}) => {
+  await sql`update discogs_artists set origin_checked_at = null, origin_next_check_at = null where discogs_artist_id = ${artistId(6)}`;
+  try {
+    await page.goto('/bacs');
+    await page
+      .getByRole('combobox', { name: 'Ranger les bacs', exact: true })
+      .selectOption('continent');
+    await expect(page.getByText(/Artistes : 5 identifiés · 1 à rechercher/)).toBeVisible();
+    await chooseCrate(page, /Origine inconnue/);
+    await sql`update discogs_artists set origin_countries = ARRAY['South Africa'], origin_source_url = 'https://www.discogs.com/artist/5353905', origin_checked_at = now(), origin_next_check_at = now() + interval '30 days' where discogs_artist_id = ${artistId(6)}`;
+    await sql`update tasks set status = 'completed' where type = 'catalog.fetch_artist_origin' and payload->>'discogsArtistId' = ${artistId(6)}`;
+    await expect(page.getByText(/Artistes : 6 identifiés · 0 à rechercher/)).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(
+      page.getByRole('heading', { name: 'Disque sans métadonnées', exact: true }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Actualiser les bacs', exact: true }).click();
+    await expect(
+      page.getByText('6 disque(s) avec une origine sur 6', { exact: true }),
+    ).toBeVisible();
+    await chooseCrate(page, /Afrique/);
+    await page.getByRole('button', { name: 'Disque suivant', exact: true }).click();
+    await expect(
+      page.getByRole('link', { name: 'Source de l’origine de l’artiste 1 sur Discogs' }),
+    ).toHaveAttribute('href', 'https://www.discogs.com/artist/5353905');
+    const response = await page.request.get('/api/collection/origins?userId=' + friendId);
+    expect(await response.json()).toMatchObject({ ownerId, total: 6, known: 6 });
+  } finally {
+    await sql`update discogs_artists set origin_countries = ARRAY[]::text[], origin_source_url = null, origin_checked_at = now(), origin_next_check_at = now() + interval '1 day' where discogs_artist_id = ${artistId(6)}`;
+  }
 });
 
 test('le header ouvre des bacs par genre, année ou continent sans doubler les exemplaires', async ({

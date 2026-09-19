@@ -8,10 +8,10 @@ import { z } from 'zod';
 
 import { moduleLogger } from '@/lib/logger';
 import {
-  artistOriginApi,
   ArtistOriginError,
   type ArtistOriginApi,
 } from '@/modules/providers/wikidata/artist-origin';
+import { artistOriginApi } from '@/modules/providers/artist-origin';
 import {
   artistOriginIsFresh,
   saveArtistOrigin,

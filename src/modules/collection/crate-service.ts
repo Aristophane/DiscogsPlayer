@@ -83,6 +83,28 @@ function isPlaceholderArtist(name: string): boolean {
   );
 }
 
+/** Metadata only: the sync module combines this with its own task states. */
+export async function getCollectionOriginArtists(userId: string) {
+  const rows = await db
+    .selectDistinct({
+      id: discogsArtists.discogsArtistId,
+      name: discogsArtists.name,
+      countries: discogsArtists.originCountries,
+      checkedAt: discogsArtists.originCheckedAt,
+      version: discogsArtists.originLookupVersion,
+    })
+    .from(collectionInstances)
+    .innerJoin(
+      discogsReleaseArtists,
+      eq(discogsReleaseArtists.releaseId, collectionInstances.releaseId),
+    )
+    .innerJoin(discogsArtists, eq(discogsArtists.id, discogsReleaseArtists.artistId))
+    .where(and(eq(collectionInstances.userId, userId), eq(collectionInstances.isActive, true)));
+  return rows.filter(
+    (row) => row.id && /^[1-9]\d*$/.test(row.id) && !isPlaceholderArtist(row.name),
+  );
+}
+
 /** Only main artists in this session owner's active collection are eligible. */
 export async function listCollectionOriginCandidates(userId: string): Promise<string[]> {
   const rows = await db
@@ -97,7 +119,7 @@ export async function listCollectionOriginCandidates(userId: string): Promise<st
       and(
         eq(collectionInstances.userId, userId),
         eq(collectionInstances.isActive, true),
-        sql`(${discogsArtists.originNextCheckAt} is null or ${discogsArtists.originNextCheckAt} <= now())`,
+        sql`(${discogsArtists.originNextCheckAt} is null or ${discogsArtists.originNextCheckAt} <= now() or (cardinality(${discogsArtists.originCountries}) = 0 and ${discogsArtists.originLookupVersion} < 2))`,
       ),
     );
   return rows.flatMap((row) =>

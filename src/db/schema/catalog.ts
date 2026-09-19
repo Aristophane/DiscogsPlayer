@@ -97,6 +97,7 @@ export const discogsArtists = pgTable(
       .notNull()
       .default(sql`'{}'::text[]`),
     originSourceUrl: text('origin_source_url'),
+    originLookupVersion: integer('origin_lookup_version').notNull().default(0),
     originCheckedAt: timestamp('origin_checked_at', { withTimezone: true }),
     originNextCheckAt: timestamp('origin_next_check_at', { withTimezone: true }),
   },

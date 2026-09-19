@@ -27,17 +27,26 @@ export class ArtistOriginError extends Error {
     public readonly retryable: boolean,
     public readonly retryAfterMs = 60_000,
   ) {
-    super('Wikidata artist origin unavailable');
+    super('Artist origin unavailable');
   }
 }
 
 /** Exact identity, no name matching or inference from biography, nationality or pressing. */
 export function buildArtistOriginQuery(discogsArtistId: string): string {
   if (!/^[1-9]\d*$/.test(discogsArtistId)) throw new ArtistOriginError(false);
+  return originQuery('P1953', discogsArtistId);
+}
+
+export function buildMusicBrainzOriginQuery(id: string): string {
+  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(id)) throw new ArtistOriginError(false);
+  return originQuery('P434', id);
+}
+
+function originQuery(property: 'P1953' | 'P434', id: string): string {
   return `PREFIX wdt: <http://www.wikidata.org/prop/direct/>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 SELECT DISTINCT ?artist ?countryName ?basis WHERE {
-  ?artist wdt:P1953 "${discogsArtistId}" .
+  ?artist wdt:${property} "${id}" .
   OPTIONAL {
     { ?artist wdt:P495 ?country . BIND("origin" AS ?basis) }
     UNION { ?artist wdt:P740 ?place . ?place wdt:P17? ?country . BIND("formation" AS ?basis) }
@@ -71,10 +80,13 @@ let chain: Promise<unknown> = Promise.resolve();
 let nextAllowedAt = 0;
 
 /** One request at a time per worker, at least one second apart, including provider cooldown. */
-export function createArtistOriginApi(fetcher: typeof fetch = fetch): ArtistOriginApi {
+export function createArtistOriginApi(
+  fetcher: typeof fetch = fetch,
+  queryBuilder = buildArtistOriginQuery,
+): ArtistOriginApi {
   return {
     lookup(discogsArtistId) {
-      const query = buildArtistOriginQuery(discogsArtistId);
+      const query = queryBuilder(discogsArtistId);
       const run = chain.then(async () => {
         // Cooldowns belong to the durable task queue; do not hold a worker lock while waiting.
         if (nextAllowedAt > Date.now() + 1100)
