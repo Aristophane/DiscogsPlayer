@@ -137,9 +137,17 @@ test('la collection est accessible et se rend sur mobile', async ({ page }, test
   await expect(page.getByRole('main').getByRole('link', { name: 'Paramètres' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Voir l’import' })).toHaveCount(0);
   await expect(page.getByRole('combobox', { name: 'Collection affichée' })).toBeVisible();
-  await expect(
-    page.getByRole('link', { name: 'Découvrir les collections de mes amis' }),
-  ).toHaveAttribute('href', '/amis');
+  // L'accès aux amis est dans la navigation du header, repliée sur mobile.
+  const header = page.getByRole('banner');
+  const openMenu = header.getByRole('button', { name: 'Ouvrir le menu' });
+  const menuIsCollapsed = await openMenu.isVisible();
+  if (menuIsCollapsed) await openMenu.click();
+  const friendsLink = header.getByRole('link', { name: 'Amis', exact: true });
+  await expect(friendsLink).toBeVisible();
+  await expect(friendsLink).toHaveAttribute('href', '/amis');
+  if (menuIsCollapsed) {
+    await header.getByRole('button', { name: 'Fermer le menu' }).click();
+  }
   await expect(page.getByRole('link', { name: /Ágætis Byrjun/ })).toBeVisible();
 
   // Pochette manquante : un texte explicite, jamais une image cassée (§22.5). Le repli

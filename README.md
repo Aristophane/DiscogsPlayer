@@ -11,9 +11,12 @@ puis écoutez-le via YouTube ou un Embed Spotify.
 
 ## Prérequis
 
-- **Node.js ≥ 22.13** (la chaîne ESLint refuse les versions antérieures)
+- **Node.js 22 ≥ 22.22.2, 24 ≥ 24.15.0 ou ≥ 26** (prérequis de jsdom 30)
 - **Docker Desktop** démarré (PostgreSQL 17)
 - npm 10+
+
+Les versions retenues et les exceptions de compatibilité sont détaillées dans
+[`docs/DEPENDANCES.md`](docs/DEPENDANCES.md).
 
 ## Démarrage local
 
