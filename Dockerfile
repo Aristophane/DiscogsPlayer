@@ -8,7 +8,7 @@
 # que l'image web, pas l'image worker, pour un déploiement mono-VPS où la taille importe
 # peu). Voir docs/DEPLOIEMENT.md.
 
-FROM node:22-alpine AS deps
+FROM node:24-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 # `--include=dev` n'est pas décoratif : la plateforme de déploiement (Coolify) injecte
@@ -20,7 +20,7 @@ COPY package.json package-lock.json ./
 # migrations). Ne pas le retirer en croyant alléger l'image.
 RUN npm ci --include=dev
 
-FROM node:22-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -42,7 +42,7 @@ ENV APP_BASE_URL=http://build-time.invalid \
     PROVIDERS_MODE=live
 RUN npm run build
 
-FROM node:22-alpine AS runtime
+FROM node:24-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
