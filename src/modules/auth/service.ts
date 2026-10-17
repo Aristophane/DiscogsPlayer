@@ -148,3 +148,14 @@ export async function getDiscogsTokens(userId: string): Promise<OAuthTokenPair |
     tokenSecret: decryptSecret(row.accessTokenSecretCiphertext),
   };
 }
+
+/** Comptes connectés à maintenir à jour, sans exposer leurs jetons au planificateur. */
+export async function listCollectionSyncUserIds(): Promise<string[]> {
+  const rows = await db
+    .select({ id: users.id })
+    .from(users)
+    .innerJoin(discogsCredentials, eq(discogsCredentials.userId, users.id))
+    .where(isNull(users.deletedAt));
+
+  return rows.map(({ id }) => id);
+}

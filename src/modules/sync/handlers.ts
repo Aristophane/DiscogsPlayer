@@ -7,6 +7,7 @@
 import { z } from 'zod';
 
 import { moduleLogger } from '@/lib/logger';
+import { enrichDailyFeed, markFeedPartial, TASK_REFRESH_FEED } from '@/modules/feed/service';
 import {
   ArtistOriginError,
   type ArtistOriginApi,
@@ -96,6 +97,18 @@ export async function runTask(
   origins: ArtistOriginApi = artistOriginApi,
 ): Promise<void> {
   switch (task.type) {
+    case TASK_REFRESH_FEED: {
+      const { userId, day } = z
+        .object({ userId: z.string().uuid(), day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })
+        .parse(task.payload);
+      try {
+        await enrichDailyFeed(userId, day);
+      } catch (error) {
+        if (task.attemptCount >= task.maxAttempts) await markFeedPartial(userId, day);
+        throw error;
+      }
+      return;
+    }
     case 'catalog.fetch_artist_origin': {
       const { discogsArtistId } = z
         .object({ discogsArtistId: z.string().regex(/^[1-9]\d*$/) })

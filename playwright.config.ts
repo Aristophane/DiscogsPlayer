@@ -1,8 +1,12 @@
 import { config } from 'dotenv';
 import { defineConfig, devices } from '@playwright/test';
+import { testDatabaseUrl } from './scripts/test-database-url.mts';
 
 // Les specs amorcent la base servie par l'application lancée ci-dessous.
 config({ path: '.env.local' });
+process.env.TEST_DATABASE_URL = testDatabaseUrl(process.env.DATABASE_URL ?? '');
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+process.env.PROVIDERS_MODE = 'fixtures';
 
 const baseURL = process.env.APP_BASE_URL ?? 'http://localhost:3004';
 
@@ -33,9 +37,9 @@ export default defineConfig({
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: {
-    command: 'npm run dev',
+    command: 'npm run dev -- --webpack',
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });

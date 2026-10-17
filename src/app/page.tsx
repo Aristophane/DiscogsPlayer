@@ -3,15 +3,10 @@ import Link from 'next/link';
 import { t } from '@/lib/i18n';
 import { Logo } from '@/lib/ui/logo';
 import { getCurrentUser } from '@/modules/auth/current-user';
-import { SpotifyPreferenceToggle } from '@/modules/auth/components/spotify-preference';
-import { getCollectionHighlights } from '@/modules/collection/service';
-import { CollectionHighlights } from '@/modules/collection/components/collection-highlights';
-import { FriendsActivity } from '@/modules/collection/components/friends-activity';
-import { RandomSpotlight } from '@/modules/collection/components/random-spotlight';
-import { requestCollectionStatisticsRefresh } from '@/modules/sync/service';
-import { ViewingAsBanner } from '@/modules/sharing/components/viewing-as-banner';
+import { ensureDailyFeed, getFeedPage } from '@/modules/feed/service';
+import { HomeFeed } from '@/modules/feed/components/home-feed';
 
-/** Accueil : découvertes, actualités des amis et tops de la collection affichée. */
+/** Accueil : publications des collections personnelles et partagées. */
 export default async function HomePage() {
   const user = await getCurrentUser();
 
@@ -37,33 +32,17 @@ export default async function HomePage() {
     );
   }
 
-  const highlights = await getCollectionHighlights(user.activeCollectionOwnerId);
-  await requestCollectionStatisticsRefresh(user.activeCollectionOwnerId);
+  await ensureDailyFeed(user.id);
+  const feed = await getFeedPage(user.id);
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-12 sm:px-6">
-      <h1 className="text-2xl font-semibold tracking-tight">{t('home.hub.title')}</h1>
-
-      {/* Onboarding facultatif (ADR-0006) : disparaît dès qu'une réponse est donnée,
-          rejouable ensuite depuis les paramètres. */}
-      <SpotifyPreferenceToggle initial={user.spotifyEnabled} variant="onboarding" />
-
-      {user.activeCollectionOwner ? (
-        <ViewingAsBanner ownerUsername={user.activeCollectionOwner.username} />
-      ) : null}
-
-      <div className="grid items-start gap-10 border-t border-border pt-8 md:grid-cols-[minmax(0,1fr)_minmax(0,0.65fr)]">
-        <FriendsActivity userId={user.id} activeOwnerId={user.activeCollectionOwnerId} />
-        <RandomSpotlight
-          key={user.activeCollectionOwnerId}
-          ownerId={user.activeCollectionOwnerId}
-        />
-      </div>
-
-      <CollectionHighlights
-        key={user.activeCollectionOwnerId}
-        initial={highlights}
-        ownerUsername={user.activeCollectionOwner?.username ?? null}
+    <main className="mx-auto w-full max-w-2xl flex-1 pb-12 sm:border-x sm:border-border">
+      <h1 className="sr-only">{t('feed.title')}</h1>
+      <HomeFeed
+        key={user.id}
+        userId={user.id}
+        initial={feed}
+        activeOwnerId={user.activeCollectionOwnerId}
       />
     </main>
   );

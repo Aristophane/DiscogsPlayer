@@ -9,7 +9,12 @@
 import { and, arrayOverlaps, eq, inArray, sql, type SQL } from 'drizzle-orm';
 
 import { db } from '@/db/client';
-import { collectionInstances, discogsReleases } from '@/db/schema';
+import {
+  collectionInstances,
+  discogsReleases,
+  discogsArtists,
+  discogsReleaseArtists,
+} from '@/db/schema';
 import { normalizeText } from '@/modules/catalog/normalize';
 import { STATISTICS_FRESHNESS_MS } from '@/modules/catalog/service';
 import { listGrantsReceivedBy } from '@/modules/sharing/service';
@@ -386,6 +391,95 @@ export async function listStaleCollectionStatistics(userId: string): Promise<str
       ),
     );
   return rows.map((row) => row.discogsReleaseId);
+}
+
+/** Instantané local pour le fil ; les propriétaires sont résolus côté serveur via les partages. */
+export async function listFeedCandidates(ownerIds: string[], seed: string) {
+  if (!ownerIds.length) return [];
+  return db
+    .select({
+      ownerId: collectionInstances.userId,
+      discogsReleaseId: discogsReleases.discogsReleaseId,
+      masterId: discogsReleases.masterId,
+      title: discogsReleases.title,
+      artists: discogsReleases.artistsText,
+      coverUrl: discogsReleases.primaryImageUrl,
+      year: discogsReleases.year,
+      price: sql<
+        string | null
+      >`case when ${discogsReleases.numForSale} > 0 then ${discogsReleases.lowestPriceEur} end`,
+      have: discogsReleases.communityHave,
+      want: discogsReleases.communityWant,
+      addedAt: sql<string | null>`min(${collectionInstances.dateAdded})`,
+      artistRefs: sql<unknown>`coalesce((select jsonb_agg(jsonb_build_object('id', a.discogs_artist_id, 'name', a.name) order by ra.position)
+      from ${discogsReleaseArtists} ra inner join ${discogsArtists} a on a.id = ra.artist_id
+      where ra.release_id = ${discogsReleases.id} and a.discogs_artist_id is not null), '[]'::jsonb)`,
+    })
+    .from(collectionInstances)
+    .innerJoin(discogsReleases, eq(discogsReleases.id, collectionInstances.releaseId))
+    .where(
+      and(inArray(collectionInstances.userId, ownerIds), eq(collectionInstances.isActive, true)),
+    )
+    .groupBy(collectionInstances.userId, discogsReleases.id)
+    .orderBy(sql`md5(${seed} || ${discogsReleases.discogsReleaseId})`, collectionInstances.userId)
+    .limit(200);
+}
+
+/** Recontrôle des éditions encore visibles : retrait et révocation s'appliquent aussi à l'historique. */
+export async function visibleFeedReleases(ownerIds: string[], releaseIds: string[]) {
+  if (!ownerIds.length || !releaseIds.length) return [];
+  return db
+    .selectDistinct({
+      ownerId: collectionInstances.userId,
+      discogsReleaseId: discogsReleases.discogsReleaseId,
+    })
+    .from(collectionInstances)
+    .innerJoin(discogsReleases, eq(discogsReleases.id, collectionInstances.releaseId))
+    .where(
+      and(
+        inArray(collectionInstances.userId, ownerIds),
+        inArray(discogsReleases.discogsReleaseId, releaseIds),
+        eq(collectionInstances.isActive, true),
+      ),
+    );
+}
+
+export async function getCollectionMarketOverview(userId: string) {
+  const [summary] = await db.execute<{
+    editions: number;
+    copies: number;
+    priced: number;
+    total: string | null;
+  }>(sql`
+    select count(*)::int as editions, coalesce(sum(copies), 0)::int as copies,
+      count(*) filter (where price is not null)::int as priced, sum(price * copies)::text as total
+    from (select r.id, count(*) as copies, case when r.num_for_sale > 0 then r.lowest_price_eur end as price
+      from ${collectionInstances} ci inner join ${discogsReleases} r on r.id = ci.release_id
+      where ci.user_id = ${userId}::uuid and ci.is_active = true group by r.id) editions`);
+  const rarest = await db
+    .select({
+      discogsReleaseId: discogsReleases.discogsReleaseId,
+      title: discogsReleases.title,
+      artists: discogsReleases.artistsText,
+      coverUrl: discogsReleases.primaryImageUrl,
+      communityHave: discogsReleases.communityHave,
+      communityWant: discogsReleases.communityWant,
+      lowestPriceEur: discogsReleases.lowestPriceEur,
+      statisticsFetchedAt: discogsReleases.statisticsFetchedAt,
+    })
+    .from(collectionInstances)
+    .innerJoin(discogsReleases, eq(discogsReleases.id, collectionInstances.releaseId))
+    .where(and(...baseFilters(userId, {}), sql`${discogsReleases.communityHave} > 0`))
+    .groupBy(discogsReleases.id)
+    .orderBy(discogsReleases.communityHave, discogsReleases.id)
+    .limit(5);
+  return {
+    editions: summary?.editions ?? 0,
+    copies: summary?.copies ?? 0,
+    priced: summary?.priced ?? 0,
+    total: summary?.total ?? null,
+    rarest,
+  };
 }
 
 /**

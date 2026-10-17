@@ -21,6 +21,7 @@ const LINKS: { href: string; labelKey: MessageKey }[] = [
   { href: '/', labelKey: 'nav.home' },
   { href: '/collection', labelKey: 'nav.collection' },
   { href: '/bacs', labelKey: 'nav.crates' },
+  { href: '/stats', labelKey: 'nav.stats' },
   { href: '/aleatoire', labelKey: 'nav.random' },
   { href: '/radio', labelKey: 'nav.radio' },
   { href: '/amis', labelKey: 'nav.friends' },

@@ -50,6 +50,8 @@ export type EnqueueOptions = {
   maxAttempts?: number;
   /** Plus haut passe en premier dans `claim()` (§9.4, Lot 6bis). `0` par défaut. */
   priority?: number;
+  /** Les visites répétées ne doivent pas avancer le backoff d'une tâche de fond. */
+  keepExisting?: boolean;
 };
 
 /** Enfile un lot sans avancer les reprises après un 429 déjà programmées. */
@@ -87,13 +89,16 @@ export async function enqueueBackgroundBatch(
  * demande explicite ne doit pas rester derrière un backoff déjà entamé par un échec
  * précédent.
  */
-export async function enqueue(options: EnqueueOptions): Promise<string | null> {
+export async function enqueue(
+  options: EnqueueOptions,
+  executor: Pick<typeof db, 'execute'> = db,
+): Promise<string | null> {
   const priority = options.priority ?? 0;
   const runAfter = options.runAfter ?? new Date();
   const maxAttempts = options.maxAttempts ?? 5;
   const dedupeKey = options.dedupeKey ?? null;
 
-  const rows = await db.execute<{ id: string }>(sql`
+  const rows = await executor.execute<{ id: string }>(sql`
     insert into ${tasks} (type, payload, dedupe_key, run_after, max_attempts, priority)
     values (
       ${options.type},
@@ -108,6 +113,7 @@ export async function enqueue(options: EnqueueOptions): Promise<string | null> {
       priority = greatest(${tasks}.priority, excluded.priority),
       run_after = least(${tasks}.run_after, excluded.run_after),
       updated_at = now()
+    where ${!options.keepExisting}
     returning id
   `);
 

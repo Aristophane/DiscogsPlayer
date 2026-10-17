@@ -8,7 +8,13 @@ import { spotlightSchema, type Spotlight } from '../home-contracts';
 import { coverProxyUrl } from '../cover';
 import { AlbumCover } from './album-cover';
 
-export function RandomSpotlight({ ownerId }: { ownerId: string }) {
+export function RandomSpotlight({
+  ownerId,
+  ownerUsername,
+}: {
+  ownerId: string;
+  ownerUsername: string | null;
+}) {
   const [item, setItem] = useState<Spotlight>(null);
   const [pending, setPending] = useState(true);
   const [error, setError] = useState(false);
@@ -62,7 +68,11 @@ export function RandomSpotlight({ ownerId }: { ownerId: string }) {
       <h2 id="random-spotlight" className="text-xl font-semibold tracking-tight">
         {t('home.spotlight.title')}
       </h2>
-      <p className="mt-1 text-sm text-muted">{t('home.spotlight.description')}</p>
+      <p className="mt-1 text-sm text-muted">
+        {ownerUsername
+          ? t('home.spotlight.friendDescription', { username: ownerUsername })
+          : t('home.spotlight.description')}
+      </p>
       <div className="mt-5" aria-busy={pending}>
         {item ? (
           <>

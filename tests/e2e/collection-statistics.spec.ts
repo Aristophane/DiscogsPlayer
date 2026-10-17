@@ -39,6 +39,8 @@ test.beforeAll(async () => {
 });
 
 test.beforeEach(async ({ page }) => {
+  await sql`delete from feed_editions where user_id = ${ownerId}`;
+  await sql`delete from tasks where dedupe_key like ${`feed:${ownerId}:%`}`;
   await sql`update sessions set viewing_as_user_id = null where user_id = ${ownerId}`;
   await sql`update collection_instances set is_active = true where user_id in (${ownerId}, ${friendId})`;
   await sql`update discogs_releases set statistics_fetched_at = now(), community_want = 0, lowest_price_eur = 25.5 where discogs_release_id = ${R(1)}`;
@@ -57,7 +59,7 @@ test.afterAll(async () => {
 test('les tops personnels sont classés, accessibles et sans débordement', async ({
   page,
 }, testInfo) => {
-  await page.goto('/');
+  await page.goto('/stats');
   const wanted = page.getByRole('region', { name: 'Les plus wanted', exact: true });
   const valuable = page.getByRole('region', {
     name: 'Les mieux valorisés à la vente',
@@ -99,16 +101,13 @@ test('les classements et la barre progressent automatiquement toutes les cinq se
   page.on('request', (request) => {
     if (request.url().includes('/api/collection/highlights')) polls++;
   });
-  await page.goto('/');
+  await page.goto('/stats');
   const progress = page.getByRole('progressbar', {
     name: 'Actualisation des valeurs de la collection',
   });
   await expect(progress).toHaveAttribute('aria-valuenow', '5');
   await expect(progress).toHaveAttribute('aria-valuemax', '6');
   await expect(page.getByText(/Mise à jour des classements dans \d s/)).toBeVisible();
-  const spotlight = page.getByRole('region', { name: 'Un disque au hasard', exact: true });
-  await expect(spotlight.getByRole('link')).toBeVisible();
-  const suggested = await spotlight.getByRole('link').getAttribute('href');
   await sql`update discogs_releases set statistics_fetched_at = now(), community_want = 9999, lowest_price_eur = 9999 where discogs_release_id = ${R(1)}`;
   await expect(progress).toHaveCount(0, { timeout: 12_000 });
   for (const title of ['Les plus wanted', 'Les mieux valorisés à la vente']) {
@@ -116,39 +115,36 @@ test('les classements et la barre progressent automatiquement toutes les cinq se
       page.getByRole('region', { name: title, exact: true }).getByRole('listitem').first(),
     ).toContainText('Édition 1');
   }
-  await expect(spotlight.getByRole('link')).toHaveAttribute('href', suggested!);
   const completedPolls = polls;
   await page.waitForTimeout(5500);
   expect(polls).toBe(completedPolls);
   expect(polls).toBeGreaterThan(0);
 });
 
-test('la suggestion change au rafraîchissement et au clic sur un autre disque', async ({
-  page,
-}) => {
+test('le fil conserve ses suggestions quotidiennes au rafraîchissement', async ({ page }) => {
   await page.goto('/');
-  const spotlight = page.getByRole('region', { name: 'Un disque au hasard', exact: true });
-  await expect(spotlight.getByRole('link')).toBeVisible();
-  const first = await spotlight.getByRole('link').getAttribute('href');
+  const cards = page.getByRole('region', { name: 'Votre fil', exact: true }).getByRole('article');
+  await expect(cards.first()).toBeVisible();
+  const first = await cards.getByRole('heading').allTextContents();
   await page.reload();
-  await expect(spotlight.getByRole('link')).toBeVisible();
-  const second = await spotlight.getByRole('link').getAttribute('href');
-  expect(second).not.toBe(first);
-  await spotlight.getByRole('button', { name: 'Un autre disque' }).click();
-  await expect(spotlight.getByRole('link')).not.toHaveAttribute('href', second!);
+  await expect(cards.first()).toBeVisible();
+  expect(await cards.getByRole('heading').allTextContents()).toEqual(first);
 });
 
 test('le fil ouvre la collection de l’ami et disparaît après révocation', async ({ page }) => {
   await page.goto('/');
-  const activity = page.getByRole('region', { name: 'Dans les bacs de vos amis' });
-  await expect(activity.getByText('stats_friend a ajouté à sa collection')).toHaveCount(6);
-  await activity.getByRole('button', { name: /Album de mon ami/ }).click();
-  await expect(page.getByRole('heading', { name: 'Album de mon ami', exact: true })).toBeVisible();
+  const activity = page.getByRole('region', { name: 'Votre fil', exact: true });
+  const card = activity
+    .getByRole('article')
+    .filter({ hasText: 'Collection de stats_friend' })
+    .first();
+  const title = await card.getByRole('heading').innerText();
+  await card.getByRole('button', { name: 'Voir le disque', exact: true }).click();
+  await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
   await expect(page.getByText('Vous consultez la collection de stats_friend.')).toBeVisible();
   await sql`update collection_shares set revoked_at = now() where owner_id = ${friendId} and grantee_id = ${ownerId}`;
   await page.goto('/');
-  await expect(activity.getByText('Album de mon ami')).toHaveCount(0);
-  await expect(activity.getByRole('link', { name: 'Voir mes amis' })).toBeVisible();
+  await expect(activity.getByText('Collection de stats_friend')).toHaveCount(0);
 });
 
 test('les nouvelles API exigent une session et ignorent un propriétaire fourni par le client', async ({
@@ -176,7 +172,7 @@ test('les compteurs figurent sur chaque album, avec zéro distinct d’inconnu',
 test('les tops suivent le choix de collection et ouvrent les disques de cet ami', async ({
   page,
 }) => {
-  await page.goto('/');
+  await page.goto('/stats');
   const switcher = page.getByRole('combobox', { name: 'Collection affichée' });
   await switcher.selectOption(friendId);
   await expect(page.getByText('Vous consultez la collection de stats_friend.')).toBeVisible();
@@ -199,6 +195,7 @@ test('les tops suivent le choix de collection et ouvrent les disques de cet ami'
   await expect(page).toHaveURL(/\/collection$/);
   await expect(switcher).toHaveValue(friendId);
   await page.getByRole('banner').getByRole('link', { name: 'Dig', exact: true }).click();
+  await page.goto('/stats');
   await switcher.selectOption(ownerId);
   await expect(
     page.getByRole('heading', { name: 'Le top de votre collection', exact: true }),
@@ -233,7 +230,7 @@ test('les tops amis se rafraîchissent et leur API respecte la révocation du pa
 }) => {
   await sql`update sessions set viewing_as_user_id = ${friendId} where user_id = ${ownerId}`;
   await sql`update discogs_releases set statistics_fetched_at = now() - interval '25 hours' where discogs_release_id = ${R(7)}`;
-  await page.goto('/');
+  await page.goto('/stats');
   const progress = page.getByRole('progressbar');
   await expect(progress).toHaveAttribute('aria-valuemax', '7');
   await expect(progress).toHaveAttribute('aria-valuenow', '6');
@@ -260,7 +257,7 @@ test('les tops d’une collection amie vide ne proposent pas d’import personne
 }) => {
   await sql`update sessions set viewing_as_user_id = ${friendId} where user_id = ${ownerId}`;
   await sql`update collection_instances set is_active = false where user_id = ${friendId}`;
-  await page.goto('/');
+  await page.goto('/stats');
   const highlights = page.getByRole('region', {
     name: 'Le top de la collection de stats_friend',
     exact: true,
@@ -271,7 +268,7 @@ test('les tops d’une collection amie vide ne proposent pas d’import personne
 
 test('une collection vide explique comment obtenir les tops', async ({ page }) => {
   await sql`update collection_instances set is_active = false where user_id = ${ownerId}`;
-  await page.goto('/');
+  await page.goto('/stats');
   await expect(page.getByText('Importez votre collection pour découvrir vos tops.')).toBeVisible();
   await expect(
     page
@@ -287,6 +284,7 @@ test('le sélecteur du header reste disponible sur chaque écran et ouvre la col
   const switcher = header.getByRole('combobox', { name: 'Collection affichée' });
   for (const path of [
     '/',
+    '/stats',
     '/collection',
     '/aleatoire',
     '/radio',
@@ -349,25 +347,25 @@ test('le sélecteur est à côté du logo, hors du burger, même à 320 px', asy
   await expect(switcher).toHaveValue(friendId);
 });
 
-test('six pochettes et Voir plus ouvrent les ajouts récents de l’ami', async ({ page }) => {
+test('les cartes du fil se lisent verticalement et ouvrent le disque chez son propriétaire', async ({
+  page,
+}) => {
   await page.goto('/');
-  const activity = page.getByRole('region', { name: 'Dans les bacs de vos amis' });
-  const items = activity.getByRole('listitem');
-  await expect(items).toHaveCount(6);
+  const activity = page.getByRole('region', { name: 'Votre fil', exact: true });
+  const items = activity.getByRole('article');
+  await expect(items).toHaveCount(5);
   const first = (await items.nth(0).boundingBox())!;
   const second = (await items.nth(1).boundingBox())!;
   const third = (await items.nth(2).boundingBox())!;
-  expect(second.y).toBe(first.y);
-  expect(second.x).toBeGreaterThan(first.x);
-  if (page.viewportSize()!.width < 1024) {
-    expect(third.x).toBe(first.x);
-    expect(third.y).toBeGreaterThan(first.y);
-  } else {
-    expect(third.y).toBe(first.y);
-  }
-  await activity.getByRole('button', { name: 'Voir les ajouts de stats_friend' }).first().click();
-  await expect(page).toHaveURL(/\/collection\?sort=date_added_desc$/);
+  expect(second.y).toBeGreaterThan(first.y);
+  expect(second.x).toBe(first.x);
+  expect(third.x).toBe(first.x);
+  expect(third.y).toBeGreaterThan(second.y);
+  const friendCard = items.filter({ hasText: 'Collection de stats_friend' }).first();
+  await friendCard.getByRole('button', { name: 'Voir le disque', exact: true }).click();
+  await expect(page).toHaveURL(/\/sorties\//);
   await expect(page.getByRole('combobox', { name: 'Collection affichée' })).toHaveValue(friendId);
+  await page.goto('/collection?sort=date_added_desc');
   const sort = page.getByRole('combobox', { name: 'Trier', exact: true });
   await expect(sort).toHaveValue('date_added_desc');
   const albums = page.getByRole('main').getByRole('list').getByRole('listitem');
@@ -376,8 +374,7 @@ test('six pochettes et Voir plus ouvrent les ajouts récents de l’ami', async 
   await expect(albums.last()).toContainText('Édition 13');
   await sort.selectOption('value_desc');
   await expect(albums.first()).toContainText('Édition 13');
-  await page.getByRole('banner').getByRole('link', { name: 'Dig', exact: true }).click();
-  await activity.getByRole('link', { name: 'Voir les ajouts de stats_friend' }).first().click();
+  await page.goto('/collection?sort=date_added_desc');
   await expect(sort).toHaveValue('date_added_desc');
   await expect(albums.first()).toContainText('Album de mon ami');
 });
@@ -438,9 +435,18 @@ test('le manifeste public et les icônes rendent Dig installable avec son logo',
 test('l’invitation native capturée à l’accueil reste disponible dans les paramètres', async ({
   page,
 }) => {
+  const hydrated = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === '/api/feed',
+  );
   await page.goto('/');
-  // Attendre l'hydratation avant d'émettre l'événement fourni habituellement par le navigateur.
-  await page.getByRole('region', { name: 'Un disque au hasard' }).getByRole('link').waitFor();
+  // Le premier sondage du fil garantit que les effets client, dont InstallProvider,
+  // sont installés : les cartes initiales sont désormais rendues côté serveur.
+  await hydrated;
+  await page
+    .getByRole('region', { name: 'Votre fil', exact: true })
+    .getByRole('article')
+    .first()
+    .waitFor();
   await page.evaluate(() => {
     const event = new Event('beforeinstallprompt', { cancelable: true });
     Object.defineProperties(event, {

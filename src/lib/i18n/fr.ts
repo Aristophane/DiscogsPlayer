@@ -11,6 +11,63 @@ export const fr = {
   'home.status.bootstrap': 'Fondation technique en place — Lot 0.',
 
   'nav.home': 'Accueil',
+  'nav.stats': 'Stats',
+  'feed.eyebrow': 'Dans vos collections',
+  'feed.title': 'Votre fil',
+  'feed.description':
+    'Les disques que vous aimez ont des histoires à raconter. Retrouvez celles de votre collection et de vos amis.',
+  'feed.daily': 'Votre sélection du jour',
+  'feed.kind.addition': 'Chez vos amis',
+  'feed.kind.listen': 'À réécouter',
+  'feed.kind.stat': 'Côté collection',
+  'feed.kind.album': 'L’histoire d’un disque',
+  'feed.kind.artist': 'Portrait d’artiste',
+  'feed.kind.news': 'Dans la presse',
+  'feed.collectionOf': 'Collection de {username}',
+  'feed.yourCollection': 'Votre collection',
+  'feed.additionText':
+    '{username} a ajouté ce disque à sa collection. Une nouvelle occasion de le découvrir ensemble.',
+  'feed.listenOwn': 'Une idée d’écoute dans votre collection.',
+  'feed.listenFriend': 'Une idée d’écoute dans la collection de {username}.',
+  'feed.statText':
+    'Prix minimum d’une annonce Discogs pour cette édition, hors livraison et état de votre exemplaire. Ce montant ne représente pas une vente conclue.',
+  'feed.expand': 'Voir plus',
+  'feed.collapse': 'Réduire',
+  'feed.license': 'Licence de l’extrait',
+  'feed.listen': 'Écouter',
+  'feed.playAlbum': 'Écouter {title}',
+  'feed.record': 'Voir le disque',
+  'feed.seeStats': 'Explorer les stats',
+  'feed.updates': 'De nouveaux récits sont prêts · Afficher',
+  'feed.preparing':
+    'Les récits et les actualités du jour se préparent. Vos suggestions sont déjà disponibles.',
+  'feed.waiting':
+    'Les récits arrivent en arrière-plan. Vous pouvez poursuivre votre lecture et revenir plus tard.',
+  'feed.partial':
+    'Certaines sources sont momentanément indisponibles. Les contenus déjà disponibles restent dans votre fil.',
+  'feed.emptyTitle': 'Votre fil commence avec vos disques',
+  'feed.empty':
+    'Synchronisez votre collection ou découvrez celles de vos amis. Vos premières suggestions apparaîtront ici.',
+  'feed.more': 'Charger la suite',
+  'feed.loading': 'Chargement…',
+  'feed.error': 'La suite du fil n’a pas pu être chargée. Votre lecture est conservée.',
+  'feed.retry': 'Réessayer',
+  'feed.end': 'Fin du fil',
+  'stats.eyebrow': 'Valeur & rareté',
+  'stats.title': 'Les chiffres de la collection',
+  'stats.description':
+    'Explorez les prix affichés, les éditions recherchées et celles que peu de collectionneurs déclarent posséder. Le sélecteur de collection permet aussi de consulter les stats de vos amis.',
+  'stats.editions': 'Éditions distinctes',
+  'stats.copies': 'Exemplaires',
+  'stats.priced': 'Éditions avec un prix',
+  'stats.total': 'Total des prix minimums',
+  'stats.priceHint':
+    'Somme des prix minimums d’annonces disponibles, multipliés par les exemplaires de la collection. Les éditions sans prix sont exclues. Ce repère ne tient compte ni de l’état, ni des frais, ni des ventes conclues ; ce n’est pas une estimation de revente.',
+  'stats.rareTitle': 'Les moins répandues sur Discogs',
+  'stats.rareHint':
+    'Éditions déclarées dans le moins de collections Discogs. Ce compteur n’indique pas le nombre d’exemplaires pressés.',
+  'stats.collectors': 'collections Discogs',
+  'stats.noRarity': 'Pas encore de données de possession pour ces éditions.',
   'nav.collection': 'Collection',
   'nav.crates': 'Bac à vinyle',
   'nav.random': 'Aléatoire',
@@ -219,7 +276,8 @@ export const fr = {
     'Dans le menu de votre navigateur, cherchez « Installer l’application » ou « Ajouter à l’écran d’accueil ». Si cette option n’apparaît pas, ouvrez Dig dans Chrome, Edge ou Safari.',
   'install.guide.insecure': 'Ouvrez Dig avec une adresse HTTPS pour l’installer sur cet appareil.',
   'home.spotlight.title': 'Un disque au hasard',
-  'home.spotlight.description': 'Une idée d’écoute dans la collection que vous parcourez.',
+  'home.spotlight.description': 'Une idée d’écoute dans votre collection.',
+  'home.spotlight.friendDescription': 'Une idée d’écoute dans la collection de {username}.',
   'home.spotlight.another': 'Un autre disque',
   'home.spotlight.empty':
     'Cette collection est encore vide. Synchronisez-la ou choisissez une autre collection.',

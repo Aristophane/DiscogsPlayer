@@ -8,7 +8,7 @@
  * - §12.2 : une édition n'est chargée en détail qu'une fois, même si elle apparaît dans
  *   plusieurs collections.
  */
-import { and, eq, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, eq, gt, isNull, ne, or, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { collectionInstances, syncRuns, users } from '@/db/schema';
@@ -111,47 +111,59 @@ export async function startSync(
   kind: 'initial' | 'manual' | 'scheduled',
   now = new Date(),
 ): Promise<{ run: SyncRunView; created: boolean }> {
-  const existing = await getCurrentRun(userId);
-  if (existing) {
-    return { run: existing, created: false };
-  }
+  return db.transaction(async (tx) => {
+    // Sérialise aussi les demandes entre plusieurs workers et les clics manuels.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`sync:${userId}`}))`);
 
-  if (kind === 'scheduled') {
-    const last = await getLastCompletedRun(userId);
-    if (
-      last?.completedAt &&
-      now.getTime() - last.completedAt.getTime() < SCHEDULED_MIN_INTERVAL_MS
-    ) {
-      return { run: last, created: false };
+    const [existing] = await tx
+      .select(runColumns)
+      .from(syncRuns)
+      .where(and(eq(syncRuns.userId, userId), sql`${syncRuns.status} in ('queued', 'running')`))
+      .limit(1);
+    if (existing) return { run: existing, created: false };
+
+    if (kind === 'scheduled') {
+      const cutoff = new Date(now.getTime() - SCHEDULED_MIN_INTERVAL_MS);
+      const [recent] = await tx
+        .select(runColumns)
+        .from(syncRuns)
+        .where(
+          and(
+            eq(syncRuns.userId, userId),
+            or(
+              and(eq(syncRuns.status, 'completed'), gt(syncRuns.completedAt, cutoff)),
+              // Un échec définitif ne doit pas être relancé chaque minute. Les reprises
+              // transitoires restent gérées par la tâche et son backoff existant.
+              and(eq(syncRuns.kind, 'scheduled'), gt(syncRuns.createdAt, cutoff)),
+            ),
+          ),
+        )
+        .orderBy(sql`${syncRuns.createdAt} desc`)
+        .limit(1);
+      if (recent) return { run: recent, created: false };
     }
-  }
 
-  let created: SyncRunView;
-  try {
-    const rows = await db
+    const [created] = await tx
       .insert(syncRuns)
-      .values({ userId, kind, status: 'queued' })
+      .values({ userId, kind, status: 'queued', createdAt: now, updatedAt: now })
       .returning(runColumns);
-    created = rows[0]!;
-  } catch (cause) {
-    // L'index unique partiel a tranché une course entre deux demandes simultanées.
-    const concurrent = await getCurrentRun(userId);
-    if (concurrent) {
-      return { run: concurrent, created: false };
-    }
-    throw cause;
-  }
+    if (!created) throw new Error('Échec de la création de la synchronisation');
 
-  await enqueue({
-    type: TASK_SYNC_COLLECTION,
-    payload: { syncRunId: created.id, userId },
-    dedupeKey: `sync:${userId}`,
-    maxAttempts: 5,
+    // La tâche et le run sont validés ensemble : une interruption ne laisse pas
+    // de synchronisation « en attente » sans tâche à exécuter.
+    await enqueue(
+      {
+        type: TASK_SYNC_COLLECTION,
+        payload: { syncRunId: created.id, userId },
+        dedupeKey: `sync:${userId}`,
+        maxAttempts: 5,
+      },
+      tx,
+    );
+
+    log.info({ userId, syncRunId: created.id, kind }, 'synchronisation demandée');
+    return { run: created, created: true };
   });
-
-  log.info({ userId, syncRunId: created.id, kind }, 'synchronisation demandée');
-
-  return { run: created, created: true };
 }
 
 type PageOutcome = { seen: number; changed: number; releaseIds: string[] };

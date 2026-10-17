@@ -10,3 +10,4 @@ export * from './providers';
 export * from './radio';
 export * from './sharing';
 export * from './tasks';
+export * from './feed';

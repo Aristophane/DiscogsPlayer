@@ -9,9 +9,14 @@ import { randomUUID } from 'node:crypto';
 
 import { checkDatabase, sql } from '@/db/client';
 import { getEnv } from '@/lib/env';
+import { scheduleDailyFeeds } from '@/modules/feed/service';
 import { moduleLogger } from '@/lib/logger';
 import { runTask, toTaskError } from '@/modules/sync/handlers';
 import { claim, complete, fail, recoverExpiredLocks } from '@/modules/sync/queue';
+import {
+  scheduleAutomaticCollectionSyncs,
+  SYNC_SCHEDULER_INTERVAL_MS,
+} from '@/modules/sync/scheduler';
 
 const log = moduleLogger('worker');
 
@@ -79,8 +84,19 @@ async function main(): Promise<void> {
     'worker démarré',
   );
 
+  let nextSyncCheckAt = 0;
   while (running) {
     let processed = 0;
+
+    if (Date.now() >= nextSyncCheckAt) {
+      nextSyncCheckAt = Date.now() + SYNC_SCHEDULER_INTERVAL_MS;
+      try {
+        await scheduleAutomaticCollectionSyncs();
+        await scheduleDailyFeeds();
+      } catch (error) {
+        log.error({ err: error }, 'planification des synchronisations interrompue');
+      }
+    }
 
     try {
       processed = await tick(workerId, env.WORKER_CONCURRENCY, env.WORKER_LOCK_TIMEOUT_SECONDS);

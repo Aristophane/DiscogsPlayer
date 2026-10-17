@@ -3,6 +3,12 @@
 Parcourez votre collection Discogs comme une pile de disques, tirez un album au hasard,
 puis écoutez-le via YouTube ou un Embed Spotify.
 
+L'accueil rassemble un fil quotidien de suggestions, ajouts des amis, extraits Wikipédia
+et actualités musicales, avec des cartes dépliables et un historique chargé au défilement.
+L'onglet **Stats** présente les prix d'annonces Discogs, les éditions recherchées et les
+moins répandues. La sélection et les collections sont actualisées par le worker ;
+appliquer les migrations et redémarrer web et worker après une mise à jour.
+
 - Spécification produit et technique : [`SPECIFICATION.md`](SPECIFICATION.md)
 - Écarts identifiés et résolutions retenues : [`docs/SPEC-GAPS.md`](docs/SPEC-GAPS.md)
 - Décisions techniques : [`docs/adr/`](docs/adr/)
