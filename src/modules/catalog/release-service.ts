@@ -4,7 +4,7 @@
  * L'accès est toujours qualifié par l'utilisateur : une édition qu'il ne possède pas ne
  * lui est pas servie, même si elle existe au catalogue partagé (§18.5).
  */
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import {
@@ -232,6 +232,38 @@ export async function getReleaseVideos(
     })
     .from(discogsReleaseVideos)
     .where(eq(discogsReleaseVideos.releaseId, releaseId));
+}
+
+/** Catalogue local pour un tirage Radio : deux lectures groupées, aucun appel fournisseur. */
+export async function getLocalPlaybackCatalog(releaseIds: string[]) {
+  if (releaseIds.length === 0) {
+    return { tracks: [], videos: [] };
+  }
+
+  const [tracks, videos] = await Promise.all([
+    db
+      .select({
+        id: discogsTracks.id,
+        releaseId: discogsTracks.releaseId,
+        title: discogsTracks.title,
+        durationSeconds: discogsTracks.durationSeconds,
+      })
+      .from(discogsTracks)
+      .where(and(inArray(discogsTracks.releaseId, releaseIds), eq(discogsTracks.type, 'track')))
+      .orderBy(asc(discogsTracks.ordinal)),
+    db
+      .select({
+        id: discogsReleaseVideos.id,
+        releaseId: discogsReleaseVideos.releaseId,
+        urlCanonical: discogsReleaseVideos.urlCanonical,
+        title: discogsReleaseVideos.title,
+        durationSeconds: discogsReleaseVideos.durationSeconds,
+      })
+      .from(discogsReleaseVideos)
+      .where(inArray(discogsReleaseVideos.releaseId, releaseIds)),
+  ]);
+
+  return { tracks, videos };
 }
 
 /** Première piste jouable d'une édition, pour le bouton play au niveau album. */

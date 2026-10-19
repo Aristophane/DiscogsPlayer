@@ -153,7 +153,8 @@ export function fallbackSingleVideoMatch(
   videos: readonly VideoCandidate[],
   alreadyMatchedTrackIds: ReadonlySet<string>,
 ): MatchResult | null {
-  if (videos.length !== 1) {
+  // Une vidéo unique déjà appariée est occupée, même si d'autres pistes restent libres.
+  if (videos.length !== 1 || alreadyMatchedTrackIds.size > 0) {
     return null;
   }
 

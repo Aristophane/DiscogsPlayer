@@ -13,7 +13,7 @@
  * Aucune résolution n'est déclenchée par l'import ni par le simple affichage d'une fiche
  * (§4.2) : ce service n'est appelé qu'au moment où l'utilisateur choisit une lecture.
  */
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { providerEntities, trackResolutions, users } from '@/db/schema';
@@ -21,6 +21,7 @@ import { getEnv } from '@/lib/env';
 import { moduleLogger } from '@/lib/logger';
 import {
   getPlayableTracks,
+  getLocalPlaybackCatalog,
   getReleaseVideos,
   getTrackForResolution,
 } from '@/modules/catalog/release-service';
@@ -54,6 +55,8 @@ async function getCachedResolution(trackId: string) {
       entityType: providerEntities.entityType,
       externalId: providerEntities.externalId,
       titleCache: providerEntities.titleCache,
+      source: trackResolutions.source,
+      confidenceScore: trackResolutions.confidenceScore,
     })
     .from(trackResolutions)
     .innerJoin(providerEntities, eq(providerEntities.id, trackResolutions.providerEntityId))
@@ -61,6 +64,70 @@ async function getCachedResolution(trackId: string) {
     .limit(1);
 
   return rows[0] ?? null;
+}
+
+export type KnownYoutubePlayback = { videoId: string; title: string | null };
+
+/** Même appariement que la lecture, sans écrire de cache ni consommer de quota. */
+export async function getKnownYoutubePlaybacks(
+  releaseIds: string[],
+): Promise<Map<string, KnownYoutubePlayback>> {
+  const catalog = await getLocalPlaybackCatalog(releaseIds);
+  const known = new Map<string, KnownYoutubePlayback>();
+  if (catalog.tracks.length === 0) {
+    return known;
+  }
+
+  const tracksByRelease = Map.groupBy(catalog.tracks, (track) => track.releaseId);
+  const videosByRelease = Map.groupBy(catalog.videos, (video) => video.releaseId);
+  for (const [releaseId, tracks] of tracksByRelease) {
+    const videos = (videosByRelease.get(releaseId) ?? []).filter(
+      (video) => youtubeIdFromUrl(video.urlCanonical) !== null,
+    );
+    const matches = matchVideosToTracks(tracks, videos);
+    const fallback = fallbackSingleVideoMatch(
+      tracks,
+      videos,
+      new Set(matches.map((m) => m.trackId)),
+    );
+    for (const match of [...matches, ...(fallback ? [fallback] : [])]) {
+      const video = videos.find((candidate) => candidate.id === match.videoId)!;
+      known.set(match.trackId, {
+        videoId: youtubeIdFromUrl(video.urlCanonical)!,
+        title: video.title,
+      });
+    }
+  }
+
+  const cached = await db
+    .select({
+      trackId: trackResolutions.trackId,
+      source: trackResolutions.source,
+      confidenceScore: trackResolutions.confidenceScore,
+      videoId: providerEntities.externalId,
+      title: providerEntities.titleCache,
+    })
+    .from(trackResolutions)
+    .innerJoin(providerEntities, eq(providerEntities.id, trackResolutions.providerEntityId))
+    .where(
+      and(
+        inArray(
+          trackResolutions.trackId,
+          catalog.tracks.map((track) => track.id),
+        ),
+        eq(providerEntities.provider, 'youtube'),
+      ),
+    );
+
+  for (const cachedTrack of cached) {
+    // Les anciens replis pouvaient réutiliser la vidéo d'une autre piste. Le catalogue
+    // corrigé fait foi pour ces seules correspondances automatiques de score nul.
+    if (cachedTrack.source === 'discogs_video' && cachedTrack.confidenceScore === 0) {
+      continue;
+    }
+    known.set(cachedTrack.trackId, { videoId: cachedTrack.videoId, title: cachedTrack.title });
+  }
+  return known;
 }
 
 async function cacheResolution(params: {
@@ -116,10 +183,11 @@ async function resolveFromDiscogsVideo(
   trackId: string,
   releaseId: string,
 ): Promise<{ videoId: string; title: string | null } | null> {
-  const [tracks, videos] = await Promise.all([
+  const [tracks, releaseVideos] = await Promise.all([
     getPlayableTracks(releaseId),
     getReleaseVideos(releaseId),
   ]);
+  const videos = releaseVideos.filter((video) => youtubeIdFromUrl(video.urlCanonical) !== null);
 
   if (videos.length === 0) {
     return null;
@@ -185,7 +253,8 @@ export async function resolveTrack(
   }
 
   const cached = await getCachedResolution(trackId);
-  if (cached && cached.provider === 'youtube') {
+  const legacyFallback = cached?.source === 'discogs_video' && cached.confidenceScore === 0;
+  if (cached && cached.provider === 'youtube' && !legacyFallback) {
     return {
       status: 'resolved',
       provider: 'youtube',
@@ -203,6 +272,10 @@ export async function resolveTrack(
       videoId: fromDiscogs.videoId,
       title: fromDiscogs.title,
     };
+  }
+
+  if (legacyFallback) {
+    await db.delete(trackResolutions).where(eq(trackResolutions.trackId, trackId));
   }
 
   const query = buildSearchQuery({

@@ -82,6 +82,20 @@ describe('matchVideosToTracks (§13.1, §15)', () => {
 });
 
 describe('fallbackSingleVideoMatch (cas courant : un simple avec une vidéo promo)', () => {
+  it('ne réattribue pas une vidéo déjà appariée à une autre piste', () => {
+    const tracks = [
+      { id: 't1', title: 'Autre morceau', durationSeconds: 180 },
+      { id: 't2', title: 'Titre exact', durationSeconds: 180 },
+    ];
+    const videos = [{ id: 'v1', title: 'Titre exact', durationSeconds: 180 }];
+    const matches = matchVideosToTracks(tracks, videos);
+
+    expect(matches).toEqual([{ trackId: 't2', videoId: 'v1', score: 1 }]);
+    expect(
+      fallbackSingleVideoMatch(tracks, videos, new Set(matches.map((m) => m.trackId))),
+    ).toBeNull();
+  });
+
   it('attribue la vidéo unique à la première piste non appariée', () => {
     const tracks: TrackForMatch[] = [
       { id: 't1', title: 'Face A', durationSeconds: 200 },

@@ -1,0 +1,1 @@
+ALTER TABLE "feed_editions" ADD COLUMN "editorial_version" integer DEFAULT 0 NOT NULL;

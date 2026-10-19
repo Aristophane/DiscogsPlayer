@@ -12,7 +12,7 @@ import { upsertUserFromDiscogs } from '@/modules/auth/service';
 import { applyReleaseDetails } from '@/modules/catalog/service';
 import type { YoutubeApi, YoutubeSearchResult } from '@/modules/providers/youtube/api';
 import { nextPacificMidnightUtc } from '@/modules/providers/youtube/quota';
-import { resolveTrack } from '@/modules/resolution/service';
+import { getKnownYoutubePlaybacks, resolveTrack } from '@/modules/resolution/service';
 
 const ALICE = { id: 996_000_001, username: 'alice_resolution' };
 const TOKENS = { token: 'jeton', tokenSecret: 'secret' };
@@ -68,6 +68,58 @@ async function createUser(spotifyEnabled: 'unset' | 'yes' | 'no' = 'unset') {
 }
 
 describe('résolution par vidéo Discogs (§13.1 étape 3, gratuite)', () => {
+  it('identifie une vidéo locale pour la radio sans écrire de résolution', async () => {
+    const { releaseId, trackId } = await releaseWithVideo(R(1), 'Artiste Test - Première Piste');
+    const known = await getKnownYoutubePlaybacks([releaseId]);
+    expect(known.get(trackId)?.videoId).toBe('dQw4w9WgXcQ');
+    expect(
+      await db.select().from(trackResolutions).where(eq(trackResolutions.trackId, trackId)),
+    ).toHaveLength(0);
+  });
+
+  it('écarte et répare les anciennes doubles attributions déjà en cache', async () => {
+    const userId = await createUser();
+    const releaseId = await applyReleaseDetails({
+      id: R(1),
+      title: 'Album',
+      artists: [{ id: 1, name: 'Artiste Test' }],
+      tracklist: [
+        { position: 'A1', title: 'Autre morceau', type_: 'track' },
+        { position: 'A2', title: 'Titre exact', type_: 'track' },
+      ],
+      videos: [{ uri: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'Titre exact' }],
+    });
+    const tracks = await db.execute<{ id: string }>(drizzleSql`
+      select id from discogs_tracks where release_id = ${releaseId}::uuid order by ordinal
+    `);
+    const api = new FakeYoutubeApi();
+    await resolveTrack(userId, tracks[1]!.id, api);
+    const [correct] = await db
+      .select()
+      .from(trackResolutions)
+      .where(eq(trackResolutions.trackId, tracks[1]!.id));
+    await db.insert(trackResolutions).values({
+      trackId: tracks[0]!.id,
+      providerEntityId: correct!.providerEntityId,
+      source: 'discogs_video',
+      confidenceScore: 0,
+    });
+    const known = await getKnownYoutubePlaybacks([releaseId]);
+    expect(known.has(tracks[0]!.id)).toBe(false);
+    expect(known.get(tracks[1]!.id)?.videoId).toBe('dQw4w9WgXcQ');
+
+    api.results = [{ videoId: 'new12345678', title: 'Autre morceau', channelTitle: null }];
+    expect(await resolveTrack(userId, tracks[0]!.id, api)).toMatchObject({
+      videoId: 'new12345678',
+    });
+    expect(api.calls).toBe(1);
+    const [repaired] = await db
+      .select()
+      .from(trackResolutions)
+      .where(eq(trackResolutions.trackId, tracks[0]!.id));
+    expect(repaired!.source).toBe('youtube_search');
+  });
+
   it('résout depuis la vidéo Discogs sans appeler YouTube', async () => {
     const userId = await createUser();
     const { trackId } = await releaseWithVideo(R(1), 'Artiste Test - Première Piste');

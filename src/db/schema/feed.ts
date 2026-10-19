@@ -22,6 +22,7 @@ export const feedEditions = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     day: text('day').notNull(),
     status: text('status').$type<'pending' | 'ready' | 'partial'>().notNull().default('pending'),
+    editorialVersion: integer('editorial_version').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [uniqueIndex('feed_editions_user_day_key').on(table.userId, table.day)],

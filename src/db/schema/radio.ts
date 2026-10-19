@@ -67,9 +67,12 @@ export const radioSessionTracks = pgTable(
     /**
      * Toute piste tentée est marquée jouée, résolue ou non : sans cela, une piste sans
      * correspondance serait retentée à chaque tirage suivant, gaspillant du quota
-     * YouTube sur le même échec (ADR-0006 point 3). `resolved` n'est qu'un diagnostic.
+     * YouTube sur le même échec (ADR-0006 point 3). Seules les tentatives résolues
+     * entrent dans l'historique utilisé pour espacer les écoutes.
      */
     resolved: boolean('resolved').notNull(),
+    /** Média servi, conservé même si une correspondance change ensuite. */
+    youtubeVideoId: text('youtube_video_id'),
     playedAt: timestamp('played_at', { withTimezone: true }).notNull().defaultNow(),
     playOrder: integer('play_order').notNull(),
   },

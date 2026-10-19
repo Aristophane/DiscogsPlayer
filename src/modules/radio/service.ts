@@ -1,41 +1,34 @@
-/**
- * Mode Radio — lecture continue à travers la collection (ADR-0006 points 2 et 3).
- *
- * Contrairement à `resolution/service.ts`, qui résout une piste précise choisie par
- * l'utilisateur, ce module choisit *quelle* piste jouer ensuite : il privilégie les
- * pistes déjà résolues (gratuites, instantanées) et ne recourt à la recherche YouTube
- * que si aucune n'est disponible, avec un nombre de tentatives borné par tirage pour ne
- * jamais consommer un quota illimité sur une collection mal couverte.
- *
- * Suit le même style que `random/service.ts` (SQL brut contre `collection_instances` et
- * `discogs_releases`) : c'est le précédent déjà établi dans ce dépôt pour ce genre de
- * requête d'éligibilité, plutôt que de passer par les services catalogue/collection.
- */
+/** Radio : choix varié dans la collection, résolution locale puis recherche bornée. */
 import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { radioSessionTracks, radioSessions } from '@/db/schema';
 import { moduleLogger } from '@/lib/logger';
-import { getTrackForResolution } from '@/modules/catalog/release-service';
-import { resolveTrack, type ResolvedPlayback } from '@/modules/resolution/service';
+import {
+  getKnownYoutubePlaybacks,
+  resolveTrack,
+  type ResolvedPlayback,
+} from '@/modules/resolution/service';
 import type { YoutubeApi } from '@/modules/providers/youtube/api';
 
-const log = moduleLogger('radio');
+import {
+  selectRadioCandidate,
+  wasPlayedInSession,
+  type RadioCandidate,
+  type RadioHistoryEntry,
+} from './selection';
 
-/** Nombre de pistes tentées au maximum pour un seul tirage (borne le coût en quota). */
+const log = moduleLogger('radio');
 const MAX_ATTEMPTS_PER_DRAW = 6;
 
 export type RadioFilters = { genres?: string[] | undefined; styles?: string[] | undefined };
-
 export type RadioSessionView = {
   id: string;
-  /** Collection tirée (Lot 7, partage) — la sienne, ou celle d'un ami au moment d'ouvrir la session. */
   collectionOwnerId: string;
   filterGenres: string[];
   filterStyles: string[];
   completedAt: Date | null;
 };
-
 export type RadioDrawResult =
   | { status: 'track'; trackId: string; playback: ResolvedPlayback }
   | { status: 'exhausted' }
@@ -44,23 +37,15 @@ export type RadioDrawResult =
 function eligibleTracksCondition(collectionOwnerId: string, filters: RadioFilters) {
   const genres = filters.genres ?? [];
   const styles = filters.styles ?? [];
-
-  const genreCondition =
-    genres.length > 0 ? sql`and r.genres && ${sql.param(genres)}::text[]` : sql``;
-  const styleCondition =
-    styles.length > 0 ? sql`and r.styles && ${sql.param(styles)}::text[]` : sql``;
-
   return sql`
     t.type = 'track'
     and exists (
       select 1 from collection_instances ci
       where ci.release_id = t.release_id
-        and ci.user_id = ${collectionOwnerId}::uuid
-        and ci.is_active = true
+        and ci.user_id = ${collectionOwnerId}::uuid and ci.is_active = true
     )
-    and r.id = t.release_id
-    ${genreCondition}
-    ${styleCondition}
+    ${genres.length > 0 ? sql`and r.genres && ${sql.param(genres)}::text[]` : sql``}
+    ${styles.length > 0 ? sql`and r.styles && ${sql.param(styles)}::text[]` : sql``}
   `;
 }
 
@@ -76,51 +61,29 @@ export async function getActiveSession(userId: string): Promise<RadioSessionView
     .from(radioSessions)
     .where(and(eq(radioSessions.userId, userId), isNull(radioSessions.completedAt)))
     .limit(1);
-
   return rows[0] ?? null;
 }
 
-async function getSession(userId: string, sessionId: string): Promise<RadioSessionView | null> {
-  const rows = await db
-    .select({
-      id: radioSessions.id,
-      collectionOwnerId: radioSessions.collectionOwnerId,
-      filterGenres: radioSessions.filterGenres,
-      filterStyles: radioSessions.filterStyles,
-      completedAt: radioSessions.completedAt,
-    })
-    .from(radioSessions)
-    .where(and(eq(radioSessions.id, sessionId), eq(radioSessions.userId, userId)))
-    .limit(1);
-
-  return rows[0] ?? null;
-}
-
-/**
- * Ouvre une session ; une session active existante est close (même règle que RAND).
- *
- * `collectionOwnerId` (Lot 7, partage) est figé ici : `draw()` le relit depuis la
- * session plutôt que de le redemander, pour qu'une bascule de collection active en
- * cours de route ne change jamais le bassin d'une radio déjà lancée.
- */
+/** Ouvrir une session ferme la précédente et fige la collection choisie (partage). */
 export async function createSession(
   userId: string,
   collectionOwnerId: string,
   filters: RadioFilters,
   now = new Date(),
 ): Promise<RadioSessionView> {
-  const genres = filters.genres ?? [];
-  const styles = filters.styles ?? [];
-
   return db.transaction(async (tx) => {
     await tx
       .update(radioSessions)
       .set({ completedAt: now })
       .where(and(eq(radioSessions.userId, userId), isNull(radioSessions.completedAt)));
-
     const [created] = await tx
       .insert(radioSessions)
-      .values({ userId, collectionOwnerId, filterGenres: genres, filterStyles: styles })
+      .values({
+        userId,
+        collectionOwnerId,
+        filterGenres: filters.genres ?? [],
+        filterStyles: filters.styles ?? [],
+      })
       .returning({
         id: radioSessions.id,
         collectionOwnerId: radioSessions.collectionOwnerId,
@@ -128,185 +91,180 @@ export async function createSession(
         filterStyles: radioSessions.filterStyles,
         completedAt: radioSessions.completedAt,
       });
-
-    log.info(
-      { userId, collectionOwnerId, sessionId: created!.id, genres, styles },
-      'radio ouverte',
-    );
-
+    log.info({ userId, collectionOwnerId, sessionId: created!.id }, 'radio ouverte');
     return created!;
   });
 }
 
-/**
- * Sélectionne et marque une piste candidate — non encore jouée dans cette session,
- * en priorité parmi celles déjà résolues (`exists (select 1 from track_resolutions)`).
- * L'insertion sert de verrou : deux tirages concurrents ne peuvent pas choisir la même
- * piste, la contrainte unique `(session_id, track_id)` tranchant en base.
- *
- * `excludeTrackIds` écarte en plus un historique récent (toutes sessions confondues,
- * pas seulement celle-ci) : sans lui, relancer la radio choisissait quasi
- * systématiquement la même piste, celle priorisée par « déjà résolue » — souvent une
- * seule piste dans ce groupe au début, donc un tri par `random()` sans effet dessus.
- */
-async function claimNextCandidate(
-  sessionId: string,
-  collectionOwnerId: string,
-  filters: RadioFilters,
-  excludeTrackIds: string[],
-): Promise<string | null> {
-  const recentExclusion =
-    excludeTrackIds.length > 0
-      ? sql`and not (t.id = any(${sql.param(excludeTrackIds)}::uuid[]))`
-      : sql``;
+type CandidateRow = {
+  trackId: string;
+  releaseId: string;
+  artistKey: string;
+  recordingKey: string;
+};
 
-  const rows = await db.execute<{ track_id: string }>(sql`
-    with candidate as (
-      select t.id
-      from discogs_tracks t
-      join discogs_releases r on r.id = t.release_id
-      where ${eligibleTracksCondition(collectionOwnerId, filters)}
-        and not exists (
-          select 1 from radio_session_tracks rst
-          where rst.session_id = ${sessionId}::uuid and rst.track_id = t.id
-        )
-        ${recentExclusion}
-      order by
-        (exists (select 1 from track_resolutions tr where tr.track_id = t.id)) desc,
-        random()
+/** Réservation courte : aucun verrou ni connexion de transaction pendant les appels API. */
+async function claimCandidate(
+  userId: string,
+  sessionId: string,
+  candidate: RadioCandidate,
+): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const session = await tx.execute<{ id: string }>(sql`
+      select id from radio_sessions
+      where id = ${sessionId}::uuid and user_id = ${userId}::uuid and completed_at is null
+      for update
+    `);
+    if (session.length === 0) return false;
+    const conflict = await tx.execute<{ track_id: string }>(sql`
+      select track_id from radio_session_tracks
+      where session_id = ${sessionId}::uuid
+        and (track_id = ${candidate.trackId}::uuid
+          or (${candidate.videoId}::text is not null and youtube_video_id = ${candidate.videoId}))
       limit 1
-    ),
-    inserted as (
-      insert into radio_session_tracks (session_id, track_id, resolved, play_order)
-      select
-        ${sessionId}::uuid,
-        candidate.id,
-        false,
-        coalesce(
-          (select max(play_order) from radio_session_tracks where session_id = ${sessionId}::uuid),
-          0
-        ) + 1
-      from candidate
-      on conflict do nothing
-      returning track_id
-    )
-    select track_id from inserted
-  `);
-
-  return rows[0]?.track_id ?? null;
+    `);
+    if (conflict.length > 0) return false;
+    const [lastOrder] = await tx.execute<{ value: number }>(sql`
+      select coalesce(max(play_order), 0)::int as value
+      from radio_session_tracks where session_id = ${sessionId}::uuid
+    `);
+    await tx.insert(radioSessionTracks).values({
+      sessionId,
+      trackId: candidate.trackId,
+      resolved: false,
+      youtubeVideoId: candidate.videoId,
+      playOrder: lastOrder!.value + 1,
+    });
+    return true;
+  });
 }
 
-/**
- * Nombre de pistes récentes (toutes sessions de l'utilisateur confondues) à écarter des
- * tirages suivants — c'est ce qui empêche une relance de rouvrir systématiquement sur le
- * même titre.
- */
-const RECENT_HISTORY_WINDOW = 5;
-
-/** Dernières pistes jouées par cet utilisateur en Radio, toutes sessions confondues. */
-async function recentlyPlayedTrackIds(userId: string, limit: number): Promise<string[]> {
-  const rows = await db.execute<{ track_id: string }>(sql`
-    select rst.track_id
-    from radio_session_tracks rst
-    join radio_sessions rs on rs.id = rst.session_id
-    where rs.user_id = ${userId}::uuid
-    order by rst.played_at desc
-    limit ${limit}
-  `);
-
-  return rows.map((row) => row.track_id);
-}
-
-/**
- * Réclame le prochain candidat en évitant l'historique récent — sauf si ça ne laisse
- * plus rien : « dans la mesure du possible » (demande produit), jamais au prix d'un
- * épuisement à tort d'une radio filtrée sur un petit périmètre.
- */
-async function claimNextCandidateAvoidingHistory(
+/** Deux recherches concurrentes peuvent découvrir le même média : une seule le sert. */
+async function recordPlayback(
+  userId: string,
   sessionId: string,
-  collectionOwnerId: string,
-  filters: RadioFilters,
-  recentlyPlayed: string[],
-): Promise<string | null> {
-  const withHistoryExcluded = await claimNextCandidate(
-    sessionId,
-    collectionOwnerId,
-    filters,
-    recentlyPlayed,
-  );
-  if (withHistoryExcluded || recentlyPlayed.length === 0) {
-    return withHistoryExcluded;
-  }
-
-  return claimNextCandidate(sessionId, collectionOwnerId, filters, []);
-}
-
-async function markResolved(sessionId: string, trackId: string): Promise<void> {
-  await db
-    .update(radioSessionTracks)
-    .set({ resolved: true })
-    .where(
-      and(eq(radioSessionTracks.sessionId, sessionId), eq(radioSessionTracks.trackId, trackId)),
-    );
+  candidate: RadioCandidate,
+): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const session = await tx.execute<{ id: string }>(sql`
+      select id from radio_sessions
+      where id = ${sessionId}::uuid and user_id = ${userId}::uuid for update
+    `);
+    if (session.length === 0) return false;
+    const duplicate = await tx.execute<{ track_id: string }>(sql`
+      select rst.track_id from radio_session_tracks rst
+      join discogs_tracks t on t.id = rst.track_id
+      join discogs_releases r on r.id = t.release_id
+      where rst.session_id = ${sessionId}::uuid and rst.resolved = true
+        and (rst.youtube_video_id = ${candidate.videoId}
+          or r.artists_normalized || chr(31) || t.title_normalized = ${candidate.recordingKey})
+      limit 1
+    `);
+    if (duplicate.length > 0) return false;
+    await tx
+      .update(radioSessionTracks)
+      .set({
+        resolved: true,
+        youtubeVideoId: candidate.videoId,
+      })
+      .where(
+        and(
+          eq(radioSessionTracks.sessionId, sessionId),
+          eq(radioSessionTracks.trackId, candidate.trackId),
+        ),
+      );
+    return true;
+  });
 }
 
 /**
- * Tire la prochaine piste à jouer. Essaie jusqu'à `MAX_ATTEMPTS_PER_DRAW` candidats —
- * les pistes déjà résolues d'abord, donc gratuites — avant d'abandonner ce tirage plutôt
- * que de consommer un quota illimité sur une collection mal couverte.
+ * Le cache et les vidéos Discogs forment un même bassin gratuit. Après six recherches
+ * infructueuses, les pistes locales restent un repli, même récemment écoutées.
  */
 export async function draw(
   userId: string,
   sessionId: string,
   youtubeApi?: YoutubeApi,
 ): Promise<RadioDrawResult> {
-  const session = await getSession(userId, sessionId);
-  if (!session || session.completedAt !== null) {
-    return { status: 'exhausted' };
-  }
+  const [session] = await db
+    .select()
+    .from(radioSessions)
+    .where(and(eq(radioSessions.id, sessionId), eq(radioSessions.userId, userId)));
+  if (!session || session.completedAt !== null) return { status: 'exhausted' };
 
   const filters = { genres: session.filterGenres, styles: session.filterStyles };
-  // Calculé une fois pour tout l'appel : les tentatives suivantes de ce même tirage
-  // doivent éviter le même historique récent, pas seulement la première.
-  const recentlyPlayed = await recentlyPlayedTrackIds(userId, RECENT_HISTORY_WINDOW);
-
-  for (let attempt = 0; attempt < MAX_ATTEMPTS_PER_DRAW; attempt += 1) {
-    const trackId = await claimNextCandidateAvoidingHistory(
-      sessionId,
-      session.collectionOwnerId,
-      filters,
-      recentlyPlayed,
-    );
-
-    if (!trackId) {
-      // Plus aucune piste éligible non jouée : la radio est terminée.
-      await db
-        .update(radioSessions)
-        .set({ completedAt: new Date() })
-        .where(and(eq(radioSessions.id, sessionId), isNull(radioSessions.completedAt)));
-
-      return { status: 'exhausted' };
+  const candidates = await db.execute<CandidateRow>(sql`
+    select t.id as "trackId", t.release_id as "releaseId",
+      r.artists_normalized as "artistKey",
+      r.artists_normalized || chr(31) || t.title_normalized as "recordingKey"
+    from discogs_tracks t join discogs_releases r on r.id = t.release_id
+    where ${eligibleTracksCondition(session.collectionOwnerId, filters)}
+      and not exists (
+        select 1 from radio_session_tracks rst
+        where rst.session_id = ${sessionId}::uuid and rst.track_id = t.id
+      )
+  `);
+  const historyRows = await db.execute<
+    CandidateRow & {
+      sessionId: string;
+      playedAt: string;
+      videoId: string | null;
     }
-
-    const track = await getTrackForResolution(trackId);
-    if (!track) {
+  >(sql`
+    select rst.track_id as "trackId", t.release_id as "releaseId",
+      r.artists_normalized as "artistKey",
+      r.artists_normalized || chr(31) || t.title_normalized as "recordingKey",
+      rst.session_id as "sessionId", rst.played_at as "playedAt",
+      rst.youtube_video_id as "videoId"
+    from radio_session_tracks rst
+    join radio_sessions rs on rs.id = rst.session_id
+    join discogs_tracks t on t.id = rst.track_id
+    join discogs_releases r on r.id = t.release_id
+    where rs.user_id = ${userId}::uuid and rst.resolved = true
+    order by rst.played_at desc, rs.created_at desc, rst.play_order desc
+  `);
+  const known = await getKnownYoutubePlaybacks([
+    ...new Set([...candidates, ...historyRows].map((row) => row.releaseId)),
+  ]);
+  let remaining: RadioCandidate[] = candidates.map((row) => ({
+    ...row,
+    videoId: known.get(row.trackId)?.videoId ?? null,
+  }));
+  const history: RadioHistoryEntry[] = historyRows.map((row) => ({
+    ...row,
+    playedAt: new Date(row.playedAt),
+    videoId: row.videoId ?? known.get(row.trackId)?.videoId ?? null,
+  }));
+  let searches = 0;
+  while (remaining.length > 0) {
+    const available =
+      searches < MAX_ATTEMPTS_PER_DRAW
+        ? remaining
+        : remaining.filter((candidate) => candidate.videoId !== null);
+    const candidate = selectRadioCandidate(available, history, sessionId);
+    if (!candidate) {
+      if (selectRadioCandidate(remaining, history, sessionId)) return { status: 'unavailable' };
+      break;
+    }
+    remaining = remaining.filter((row) => row.trackId !== candidate.trackId);
+    if (!(await claimCandidate(userId, sessionId, candidate))) continue;
+    if (candidate.videoId === null) searches += 1;
+    const playback = await resolveTrack(userId, candidate.trackId, youtubeApi);
+    if (playback?.status !== 'resolved' || playback.provider !== 'youtube') continue;
+    const resolvedCandidate = { ...candidate, videoId: playback.videoId };
+    // Vérification après recherche, puis une seconde sous verrou pour la concurrence.
+    if (
+      wasPlayedInSession(resolvedCandidate, history, sessionId) ||
+      !(await recordPlayback(userId, sessionId, resolvedCandidate))
+    )
       continue;
-    }
-
-    const playback = await resolveTrack(userId, trackId, youtubeApi);
-
-    if (playback?.status === 'resolved') {
-      await markResolved(sessionId, trackId);
-      log.info({ sessionId, trackId, attempt }, 'piste radio tirée');
-      return { status: 'track', trackId, playback };
-    }
-
-    // Non résolue : déjà marquée jouée par `claimNextCandidate` (elle ne sera pas
-    // retentée dans cette session), on essaie un autre candidat sans dépenser plus
-    // qu'une tentative de recherche par piste manquée.
+    log.info({ sessionId, trackId: candidate.trackId, searches }, 'piste radio tirée');
+    return { status: 'track', trackId: candidate.trackId, playback };
   }
 
-  // Des pistes restent éligibles, mais aucune parmi les tentatives n'a pu être résolue
-  // (quota probablement épuisé) : distinct d'un épuisement réel du catalogue filtré.
-  return { status: 'unavailable' };
+  await db
+    .update(radioSessions)
+    .set({ completedAt: new Date() })
+    .where(and(eq(radioSessions.id, sessionId), eq(radioSessions.userId, userId)));
+  return { status: 'exhausted' };
 }
