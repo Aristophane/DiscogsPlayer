@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { t } from '@/lib/i18n';
 import { HomeFeed } from '@/modules/feed/components/home-feed';
 import type { FeedItem, FeedPage } from '@/modules/feed/contracts';
 
@@ -70,6 +71,51 @@ it('déplie un extrait et conserve les liens de source et de licence', () => {
   expect(screen.getByRole('link', { name: 'Licence de l’extrait' })).toHaveAttribute(
     'rel',
     'noopener noreferrer',
+  );
+});
+
+it('affiche la rubrique d’une anecdote sélectionnée et conserve les anciens libellés', () => {
+  const anecdote = item(1);
+  anecdote.story!.editorial = {
+    version: 1,
+    score: 73,
+    topic: 'recording',
+    section: 'Enregistrement',
+  };
+  render(<HomeFeed userId={ownerId} initial={page([anecdote, item(2)])} activeOwnerId={ownerId} />);
+  expect(screen.getByText('En studio')).toBeVisible();
+  expect(screen.getByText(t('feed.kind.artist'))).toBeVisible();
+  expect(screen.getByRole('heading', { name: 'Portrait 1' })).toBeVisible();
+  expect(screen.queryByText(/73/)).not.toBeInTheDocument();
+});
+
+it('limite les récits à trois lignes et laisse chaque publication se déplier indépendamment', () => {
+  const one = item(1);
+  const two = item(2);
+  render(<HomeFeed userId={ownerId} initial={page([one, two])} activeOwnerId={ownerId} />);
+  const texts = [one, two].map(({ id }) => document.getElementById(`post-text-${id}`)!);
+  const buttons = screen.getAllByRole('button', { name: 'Voir plus' });
+  expect(texts[0]).toHaveClass('line-clamp-3');
+  expect(texts[1]).toHaveClass('line-clamp-3');
+  expect(buttons[0]).toHaveAttribute('aria-controls', texts[0]!.id);
+  fireEvent.click(buttons[0]!);
+  expect(texts[0]).not.toHaveClass('line-clamp-3');
+  expect(texts[1]).toHaveClass('line-clamp-3');
+  fireEvent.click(screen.getByRole('button', { name: 'Réduire' }));
+  expect(texts[0]).toHaveClass('line-clamp-3');
+});
+
+it('propose aussi le dépliage des récits courts susceptibles de dépasser trois lignes sur mobile', () => {
+  const record = item(1);
+  record.story!.text =
+    'Une anecdote courte mais suffisamment détaillée pour que sa fin reste accessible sur les petits écrans. '.repeat(
+      2,
+    );
+  render(<HomeFeed userId={ownerId} initial={page([record])} activeOwnerId={ownerId} />);
+  expect(record.story!.text.length).toBeLessThan(220);
+  expect(screen.getByRole('button', { name: 'Voir plus' })).toHaveAttribute(
+    'aria-expanded',
+    'false',
   );
 });
 

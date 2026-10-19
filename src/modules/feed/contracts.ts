@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ANECDOTE_TOPICS } from './anecdotes';
 
 export const httpsUrl = z
   .string()
@@ -17,6 +18,14 @@ export const sourceStorySchema = z.object({
   language: z.enum(['fr', 'en']),
   publishedAt: z.string().datetime().nullable(),
   licenseUrl: httpsUrl.nullable(),
+  editorial: z
+    .object({
+      version: z.literal(1),
+      score: z.number().int().min(0).max(100),
+      topic: z.enum(ANECDOTE_TOPICS),
+      section: z.string().max(200).nullable(),
+    })
+    .optional(),
 });
 export type SourceStory = z.infer<typeof sourceStorySchema>;
 

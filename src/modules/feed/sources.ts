@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { getEnv } from '@/lib/env';
 import { normalizeText } from '@/modules/catalog/normalize';
 import { sourceStorySchema, type SourceStory } from './contracts';
+import { ANECDOTE_VERSION, selectWikipediaAnecdotes } from './anecdotes';
 
 const bindingsSchema = z.object({
   results: z.object({
@@ -68,6 +69,7 @@ export function wikipediaArticles(value: unknown): URL[] {
       (url) =>
         url.protocol === 'https:' &&
         ['fr.wikipedia.org', 'en.wikipedia.org'].includes(url.hostname) &&
+        !url.port &&
         url.pathname.startsWith('/wiki/') &&
         !url.username &&
         !url.password,
@@ -76,20 +78,7 @@ export function wikipediaArticles(value: unknown): URL[] {
 }
 
 export function selectWikipediaExcerpt(text: string, kind: 'album' | 'artist'): string {
-  const paragraphs = text
-    .split(/\n\s*\n/)
-    .map((part) => part.trim())
-    .filter((part) => part.length > 100 && !/^==/.test(part));
-  const history =
-    kind === 'album'
-      ? paragraphs.find((part) =>
-          /enregistr|recorded|studio|pochette|sampling|samples|compos|produced/i.test(part),
-        )
-      : undefined;
-  const selected = history ?? paragraphs[0] ?? '';
-  if (selected.length <= 2200) return selected;
-  const end = selected.lastIndexOf('. ', 2190);
-  return selected.slice(0, end > 300 ? end + 1 : 2190) + '…';
+  return selectWikipediaAnecdotes(text, kind)[0]?.text ?? '';
 }
 
 export async function fetchWikipediaStory(
@@ -117,33 +106,40 @@ export async function fetchWikipediaStory(
       prop: 'extracts|info',
       titles: title,
       explaintext: '1',
-      exsectionformat: 'plain',
+      exsectionformat: 'wiki',
       meta: 'siteinfo',
       siprop: 'rightsinfo',
       redirects: '1',
     }).toString();
     const result = extractSchema.parse(JSON.parse(await fetchText(url, fetcher)));
     const page = result.query.pages[0];
-    const text = selectWikipediaExcerpt(page?.extract ?? '', subject.kind);
-    if (!page || !text) continue;
+    const language = article.hostname.startsWith('fr.') ? ('fr' as const) : ('en' as const);
+    const anecdotes = selectWikipediaAnecdotes(page?.extract ?? '', subject.kind, language);
+    if (!page || !anecdotes.length) continue;
     // Le permalien conserve la révision de l'extrait, et la licence vient du site.
     const source = new URL('/w/index.php', article.origin);
     source.search = new URLSearchParams({
       title: page.title,
       ...(page.lastrevid ? { oldid: String(page.lastrevid) } : {}),
     }).toString();
-    return [
+    return anecdotes.map((anecdote) =>
       sourceStorySchema.parse({
         kind: subject.kind,
         title: page.title,
-        text,
+        text: anecdote.text,
         sourceName: 'Wikipédia',
         sourceUrl: source.toString(),
-        language: article.hostname.startsWith('fr.') ? 'fr' : 'en',
+        language,
         publishedAt: null,
         licenseUrl: result.query.rightsinfo.url.replace(/^http:/, 'https:'),
+        editorial: {
+          version: ANECDOTE_VERSION,
+          score: anecdote.score,
+          topic: anecdote.topic,
+          section: anecdote.section,
+        },
       }),
-    ];
+    );
   }
   return [];
 }

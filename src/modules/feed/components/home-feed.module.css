@@ -1,0 +1,66 @@
+.card {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  grid-template-areas:
+    'cover heading'
+    'story story'
+    'sources sources'
+    'actions actions';
+  align-content: start;
+  column-gap: 16px;
+  row-gap: 8px;
+  min-width: 0;
+  padding: 16px;
+}
+
+.cover {
+  grid-area: cover;
+  align-self: start;
+  width: 104px;
+}
+
+.heading {
+  grid-area: heading;
+  min-width: 0;
+}
+
+.story {
+  grid-area: story;
+  min-width: 0;
+}
+
+.sources {
+  grid-area: sources;
+  min-width: 0;
+}
+
+.actions {
+  grid-area: actions;
+  min-width: 0;
+}
+
+.error {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 640px) {
+  .card {
+    grid-template-columns: 160px minmax(0, 1fr);
+    grid-template-areas:
+      'cover heading'
+      'cover story'
+      'cover sources'
+      'cover actions';
+    column-gap: 24px;
+    row-gap: 6px;
+    padding: 20px 24px;
+  }
+
+  .cover {
+    width: 160px;
+  }
+
+  .error {
+    grid-column: 2;
+  }
+}

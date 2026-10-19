@@ -36,7 +36,7 @@ export default async function HomePage() {
   const feed = await getFeedPage(user.id);
 
   return (
-    <main className="mx-auto w-full max-w-2xl flex-1 pb-12 sm:border-x sm:border-border">
+    <main className="mx-auto w-full max-w-4xl flex-1 pb-12 sm:border-x sm:border-border">
       <h1 className="sr-only">{t('feed.title')}</h1>
       <HomeFeed
         key={user.id}

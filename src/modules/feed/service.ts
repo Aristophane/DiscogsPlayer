@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, lt, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/db/client';
 import { feedEditions, feedPosts, feedSourceCache } from '@/db/schema';
@@ -19,6 +19,7 @@ import {
   type SourceStory,
 } from './contracts';
 import { fetchMusicNews, fetchWikipediaStory, newsMentionsArtist } from './sources';
+import { ANECDOTE_VERSION, MIN_ANECDOTE_SCORE, selectWikipediaAnecdotes } from './anecdotes';
 
 export const TASK_REFRESH_FEED = 'feed.refresh_daily';
 const PAGE_SIZE = 12;
@@ -28,6 +29,43 @@ const artistRefsSchema = z.array(
   z.object({ id: z.string().regex(/^[1-9]\d*$/), name: z.string() }),
 );
 const digest = (value: string) => createHash('sha256').update(value).digest('hex').slice(0, 32);
+
+/** Keep identity stable when a source adds a new revision or citation number. */
+function wikipediaArticleKey(story: SourceStory): string {
+  const url = new URL(story.sourceUrl);
+  const article =
+    url.searchParams.get('title') ?? decodeURIComponent(url.pathname.replace(/^\/wiki\//, ''));
+  return `${url.origin}:${article.replaceAll('_', ' ')}`;
+}
+
+export function wikipediaStoryKey(story: SourceStory): string {
+  const text = story.text
+    .normalize('NFKC')
+    .replace(/\[\d+\]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLocaleLowerCase();
+  return `story:${digest(`${wikipediaArticleKey(story)}:${text}`)}`;
+}
+
+function curatedStory(story: SourceStory): SourceStory | null {
+  if (story.kind === 'news') return story;
+  if (story.editorial?.version === ANECDOTE_VERSION)
+    return story.editorial.score >= MIN_ANECDOTE_SCORE ? story : null;
+  const anecdote = selectWikipediaAnecdotes(story.text, story.kind, story.language)[0];
+  return anecdote
+    ? {
+        ...story,
+        text: anecdote.text,
+        editorial: {
+          version: ANECDOTE_VERSION,
+          score: anecdote.score,
+          topic: anecdote.topic,
+          section: anecdote.section,
+        },
+      }
+    : null;
+}
 
 async function scope(userId: string) {
   const grants = await listGrantsReceivedBy(userId);
@@ -78,8 +116,30 @@ async function appendPosts(
       .orderBy(sql`${feedPosts.position} desc`)
       .limit(1);
     let position = (last?.position ?? -1) + 1;
+    const existing = await tx
+      .select({ content: feedPosts.content })
+      .from(feedPosts)
+      .where(eq(feedPosts.editionId, edition.id));
+    const published = existing.flatMap(({ content }) => {
+      const parsed = feedContentSchema.safeParse(content);
+      if (
+        !parsed.success ||
+        !parsed.data.story ||
+        parsed.data.story.sourceName !== 'Wikipédia' ||
+        parsed.data.story.kind === 'news'
+      )
+        return [];
+      const story = curatedStory(parsed.data.story);
+      return story ? [story] : [];
+    });
+    const publishedArticles = new Set(published.map(wikipediaArticleKey));
+    let anecdoteCount = published.length;
     for (const record of records) {
-      await tx
+      const story = record.content.story;
+      const isAnecdote = !!story?.editorial && story.kind !== 'news';
+      if (isAnecdote && (anecdoteCount >= 4 || publishedArticles.has(wikipediaArticleKey(story))))
+        continue;
+      const inserted = await tx
         .insert(feedPosts)
         .values({
           editionId: edition.id,
@@ -91,7 +151,12 @@ async function appendPosts(
           contentKey: record.key,
           content: feedContentSchema.parse(record.content),
         })
-        .onConflictDoNothing();
+        .onConflictDoNothing()
+        .returning({ id: feedPosts.id });
+      if (inserted.length && isAnecdote) {
+        anecdoteCount++;
+        publishedArticles.add(wikipediaArticleKey(story));
+      }
     }
   });
 }
@@ -171,7 +236,14 @@ export async function ensureDailyFeed(userId: string, now = new Date()): Promise
     .from(feedEditions)
     .where(and(eq(feedEditions.userId, userId), eq(feedEditions.day, day)))
     .limit(1);
-  if (edition?.status === 'pending')
+  if (edition && edition.editorialVersion < ANECDOTE_VERSION && edition.status !== 'pending')
+    await db
+      .update(feedEditions)
+      .set({ status: 'pending' })
+      .where(
+        and(eq(feedEditions.id, edition.id), lt(feedEditions.editorialVersion, ANECDOTE_VERSION)),
+      );
+  if (edition && (edition.status === 'pending' || edition.editorialVersion < ANECDOTE_VERSION))
     await enqueue({
       type: TASK_REFRESH_FEED,
       payload: { userId, day },
@@ -236,7 +308,8 @@ export async function enrichDailyFeed(
     .from(feedEditions)
     .where(and(eq(feedEditions.userId, userId), eq(feedEditions.day, day)))
     .limit(1);
-  if (!edition || edition.status !== 'pending') return;
+  if (!edition || (edition.status !== 'pending' && edition.editorialVersion >= ANECDOTE_VERSION))
+    return;
   const existing = await db
     .select({ id: feedPosts.id })
     .from(feedPosts)
@@ -249,6 +322,7 @@ export async function enrichDailyFeed(
   const records: { candidate: Candidate; content: FeedContent; key: string }[] = [];
   let partial = false;
   const subjects = new Set<string>();
+  const pool: { candidate: Candidate; story: SourceStory; subjectKey: string; key: string }[] = [];
   for (const candidate of candidates) {
     const refs = artistRefsSchema.safeParse(candidate.artistRefs);
     const subjectsForRelease: { kind: 'album' | 'artist'; id: string }[] = [];
@@ -257,7 +331,7 @@ export async function enrichDailyFeed(
     if (refs.success && refs.data[0])
       subjectsForRelease.push({ kind: 'artist', id: refs.data[0].id });
     for (const subject of subjectsForRelease) {
-      const key = `wiki:${subject.kind}:${subject.id}`;
+      const key = `wiki:v2:${subject.kind}:${subject.id}`;
       if (subjects.has(key) || subjects.size >= 6) continue;
       subjects.add(key);
       const result = await cachedStories(
@@ -267,14 +341,76 @@ export async function enrichDailyFeed(
         30 * 86_400_000,
       );
       partial ||= result.failed;
-      for (const story of result.stories)
-        records.push({
-          candidate,
-          content: { ...content(candidate, names, story.kind), story },
-          key: `story:${digest(story.sourceUrl + story.text)}`,
-        });
+      for (const source of result.stories.slice(0, 3)) {
+        if (source.kind !== subject.kind) continue;
+        const story = curatedStory(source);
+        if (story) pool.push({ candidate, story, subjectKey: key, key: wikipediaStoryKey(story) });
+      }
     }
     if (subjects.size >= 6) break;
+  }
+  const previous = pool.length
+    ? await db
+        .select({ key: feedPosts.contentKey })
+        .from(feedPosts)
+        .where(
+          and(
+            eq(feedPosts.userId, userId),
+            inArray(
+              feedPosts.contentKey,
+              pool.map(({ key }) => key),
+            ),
+          ),
+        )
+    : [];
+  const seenStories = new Set(previous.map(({ key }) => key));
+  // Legacy keys included oldid. Keep their IDs and positions while preventing the
+  // same curated passage from being published again under the new stable key.
+  const legacy = pool.length
+    ? await db
+        .select({ content: feedPosts.content })
+        .from(feedPosts)
+        .where(
+          and(
+            eq(feedPosts.userId, userId),
+            sql`${feedPosts.content}->'story'->>'sourceName' = 'Wikipédia'`,
+            sql`${feedPosts.content}->'story'->>'kind' in ('album', 'artist')`,
+            sql`${feedPosts.content}->'story'->'editorial' is null`,
+          ),
+        )
+    : [];
+  for (const row of legacy) {
+    const parsed = feedContentSchema.safeParse(row.content);
+    const story = parsed.success && parsed.data.story ? curatedStory(parsed.data.story) : null;
+    if (story) seenStories.add(wikipediaStoryKey(story));
+  }
+  const selectedSubjects = new Set<string>();
+  const selectedTopics = new Set<string>();
+  const ranked = pool.sort(
+    (a, b) =>
+      Number(b.story.language === 'fr') - Number(a.story.language === 'fr') ||
+      (b.story.editorial?.score ?? 0) - (a.story.editorial?.score ?? 0) ||
+      a.key.localeCompare(b.key),
+  );
+  for (const uniqueTopics of [true, false]) {
+    for (const item of ranked) {
+      if (records.length >= 4) break;
+      const topic = item.story.editorial!.topic;
+      if (
+        seenStories.has(item.key) ||
+        selectedSubjects.has(item.subjectKey) ||
+        (uniqueTopics && selectedTopics.has(topic))
+      )
+        continue;
+      records.push({
+        candidate: item.candidate,
+        content: { ...content(item.candidate, names, item.story.kind), story: item.story },
+        key: item.key,
+      });
+      seenStories.add(item.key);
+      selectedSubjects.add(item.subjectKey);
+      selectedTopics.add(topic);
+    }
   }
   const news = await cachedStories(
     'music-news',
@@ -302,14 +438,14 @@ export async function enrichDailyFeed(
   await appendPosts(userId, day, records);
   await db
     .update(feedEditions)
-    .set({ status: partial ? 'partial' : 'ready' })
+    .set({ status: partial ? 'partial' : 'ready', editorialVersion: ANECDOTE_VERSION })
     .where(eq(feedEditions.id, edition.id));
 }
 
 export async function markFeedPartial(userId: string, day: string) {
   await db
     .update(feedEditions)
-    .set({ status: 'partial' })
+    .set({ status: 'partial', editorialVersion: ANECDOTE_VERSION })
     .where(and(eq(feedEditions.userId, userId), eq(feedEditions.day, day)));
 }
 
@@ -368,6 +504,15 @@ export async function getFeedPage(
       const row = rows[index]!;
       cursor = { day: row.day, position: row.position };
       const parsed = feedContentSchema.safeParse(row.content);
+      if (
+        parsed.success &&
+        parsed.data.story?.sourceName === 'Wikipédia' &&
+        parsed.data.story.kind !== 'news'
+      ) {
+        const story = curatedStory(parsed.data.story);
+        if (!story) continue;
+        parsed.data.story = story;
+      }
       if (visible.has(`${row.ownerId}:${row.discogsReleaseId}`) && parsed.success)
         items.push({
           ...parsed.data,

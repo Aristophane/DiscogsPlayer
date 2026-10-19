@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { eq, inArray, like } from 'drizzle-orm';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { db, sql } from '@/db/client';
@@ -8,13 +9,19 @@ import {
   discogsReleaseArtists,
   discogsReleases,
   feedEditions,
+  feedPosts,
   feedSourceCache,
   tasks,
   users,
 } from '@/db/schema';
-import { enrichDailyFeed, ensureDailyFeed, getFeedPage } from '@/modules/feed/service';
+import {
+  enrichDailyFeed,
+  ensureDailyFeed,
+  getFeedPage,
+  wikipediaStoryKey,
+} from '@/modules/feed/service';
 import { getCollectionMarketOverview } from '@/modules/collection/service';
-import type { SourceStory } from '@/modules/feed/contracts';
+import type { FeedContent, SourceStory } from '@/modules/feed/contracts';
 
 const NOW = new Date('2026-10-17T12:00:00Z');
 const DAY = '2026-10-17';
@@ -38,7 +45,13 @@ async function cleanup() {
   await db
     .delete(feedSourceCache)
     .where(
-      inArray(feedSourceCache.key, ['wiki:artist:997740001', 'wiki:album:997740002', 'music-news']),
+      inArray(feedSourceCache.key, [
+        'wiki:artist:997740001',
+        'wiki:album:997740002',
+        'wiki:v2:artist:997740001',
+        'wiki:v2:album:997740002',
+        'music-news',
+      ]),
     );
 }
 
@@ -96,7 +109,12 @@ function story(kind: SourceStory['kind']): SourceStory {
   return {
     kind,
     title: kind === 'news' ? 'Artiste Exemple annonce un concert' : 'Histoire de test',
-    text: 'Un extrait sourcé de test. '.repeat(12),
+    text:
+      kind === 'artist'
+        ? 'Le nom du groupe est né d’une plaisanterie entre les musiciens. Un ami avait mal compris leur ancien nom sur une affiche et ce surnom inattendu finit par remplacer le nom officiel.'
+        : kind === 'album'
+          ? 'Pendant l’enregistrement du disque, une panne de courant interrompt la séance. Le groupe décide de conserver le bruit de cet accident sur la bande et en fait le début du morceau.'
+          : 'Un extrait sourcé de test. '.repeat(12),
     sourceName: kind === 'news' ? 'Presse test' : 'Wikipédia',
     sourceUrl: `https://fr.wikipedia.org/wiki/Test_feed_${kind}`,
     language: 'fr',
@@ -110,6 +128,171 @@ const sources = () => ({
 });
 
 describe('fil quotidien personnel', () => {
+  it('reconnaît un récit historique malgré son ancienne clé et un nouveau permalien', async () => {
+    const previousDay = '2026-10-16';
+    const legacyStory: SourceStory = {
+      ...story('artist'),
+      sourceUrl: 'https://fr.wikipedia.org/w/index.php?title=Test_feed_artist&oldid=123',
+    };
+    const legacyContent: FeedContent = {
+      kind: 'artist',
+      title: 'Disque 0',
+      artists: 'Artiste Exemple',
+      coverUrl: null,
+      year: null,
+      ownerUsername: null,
+      addedAt: null,
+      story: legacyStory,
+      statistic: null,
+    };
+    const [previousEdition] = await db
+      .insert(feedEditions)
+      .values({ userId: own, day: previousDay, status: 'ready', editorialVersion: 0 })
+      .returning();
+    const [legacyPost] = await db
+      .insert(feedPosts)
+      .values({
+        editionId: previousEdition!.id,
+        userId: own,
+        ownerId: own,
+        discogsReleaseId: RELEASE_IDS[0]!,
+        day: previousDay,
+        position: 0,
+        contentKey: `story:${createHash('sha256')
+          .update(legacyStory.sourceUrl + legacyStory.text)
+          .digest('hex')
+          .slice(0, 32)}`,
+        content: legacyContent,
+      })
+      .returning();
+
+    await ensureDailyFeed(own, NOW);
+    await enrichDailyFeed(own, DAY, sources(), NOW);
+    const page = await getFeedPage(own, undefined, NOW, 100);
+    const artistStories = page.items.filter(({ kind }) => kind === 'artist');
+    expect(artistStories).toHaveLength(1);
+    expect(artistStories[0]!.id).toBe(legacyPost!.id);
+    expect(artistStories[0]!.day).toBe(previousDay);
+    expect(artistStories[0]!.story!.text).toBe(legacyStory.text);
+    expect(page.items.some(({ kind, day }) => kind === 'album' && day === DAY)).toBe(true);
+  });
+
+  it('reprend une édition déjà insérée sans ajouter une deuxième anecdote du même sujet', async () => {
+    const alternate: SourceStory = {
+      ...story('artist'),
+      text: 'Pour la pochette du disque, le photographe veut saisir un oiseau devant le studio. Par hasard, un chien entre dans le cadre et le groupe décide de garder cette photo inattendue.',
+    };
+    const api = sources();
+    api.wikipedia.mockImplementation(async ({ kind }) =>
+      kind === 'artist' ? [story(kind), alternate] : [story(kind)],
+    );
+    await ensureDailyFeed(own, NOW);
+    await enrichDailyFeed(own, DAY, api, NOW);
+    const before = await getFeedPage(own, undefined, NOW, 100);
+    const artistStories = before.items.filter(({ kind }) => kind === 'artist');
+    expect(artistStories).toHaveLength(1);
+
+    // Simule une interruption après l’insertion des cartes, avant la validation de l’édition.
+    await db
+      .update(feedEditions)
+      .set({ status: 'pending', editorialVersion: 0 })
+      .where(eq(feedEditions.userId, own));
+    await enrichDailyFeed(own, DAY, api, NOW);
+    const after = await getFeedPage(own, undefined, NOW, 100);
+    expect(after.status).toBe('ready');
+    expect(after.items.map(({ id }) => id)).toEqual(before.items.map(({ id }) => id));
+    expect(after.items.filter(({ kind }) => kind === 'artist')).toHaveLength(1);
+    expect(api.wikipedia).toHaveBeenCalledTimes(2);
+  });
+
+  it('met à niveau l’édition courante et ignore les anciens extraits en cache sans déplacer les publications', async () => {
+    await ensureDailyFeed(own, NOW);
+    await db
+      .update(feedEditions)
+      .set({ status: 'ready', editorialVersion: 0 })
+      .where(eq(feedEditions.userId, own));
+    await db.insert(feedSourceCache).values({
+      key: 'wiki:artist:997740001',
+      content: [
+        {
+          ...story('artist'),
+          text: 'Une biographie générale sans histoire particulière. '.repeat(5),
+        },
+      ],
+      expiresAt: new Date(NOW.getTime() + 30 * 86_400_000),
+    });
+    const before = await getFeedPage(own, undefined, NOW);
+    await ensureDailyFeed(own, NOW);
+    expect((await getFeedPage(own, undefined, NOW)).status).toBe('pending');
+    const api = sources();
+    await enrichDailyFeed(own, DAY, api, NOW);
+    const after = await getFeedPage(own, undefined, NOW);
+    expect(after.status).toBe('ready');
+    expect(after.items.slice(0, before.items.length).map(({ id }) => id)).toEqual(
+      before.items.map(({ id }) => id),
+    );
+    expect(api.wikipedia).toHaveBeenCalledWith({ kind: 'artist', id: '997740001' });
+    expect(
+      after.items
+        .filter(({ kind }) => kind === 'artist' || kind === 'album')
+        .every(({ story }) => story?.editorial?.score && story.editorial.score >= 26),
+    ).toBe(true);
+    await ensureDailyFeed(own, NOW);
+    expect((await getFeedPage(own, undefined, NOW)).status).toBe('ready');
+  });
+
+  it('fait tourner les anecdotes inédites du cache et ignore un changement de révision seul', async () => {
+    const second = {
+      ...story('artist'),
+      text: 'Pour la pochette du disque, le photographe veut saisir un oiseau devant le studio. Par hasard, un chien entre dans le cadre et le groupe décide de garder cette photo inattendue.',
+    };
+    const api = sources();
+    api.wikipedia.mockImplementation(async ({ kind }) =>
+      kind === 'artist' ? [story(kind), second] : [story(kind)],
+    );
+    await ensureDailyFeed(own, NOW);
+    await enrichDailyFeed(own, DAY, api, NOW);
+    const first = (await getFeedPage(own, undefined, NOW, 100)).items.filter(
+      ({ kind }) => kind === 'artist',
+    );
+    expect(first).toHaveLength(1);
+    const tomorrow = new Date('2026-10-18T12:00:00Z');
+    await ensureDailyFeed(own, tomorrow);
+    await enrichDailyFeed(own, '2026-10-18', api, tomorrow);
+    const next = (await getFeedPage(own, undefined, tomorrow, 100)).items.filter(
+      ({ day, kind }) => day === '2026-10-18' && kind === 'artist',
+    );
+    expect(next).toHaveLength(1);
+    expect(next[0]!.story!.text).not.toBe(first[0]!.story!.text);
+    expect(api.wikipedia).toHaveBeenCalledTimes(2);
+    expect(
+      wikipediaStoryKey({
+        ...story('artist'),
+        sourceUrl: 'https://fr.wikipedia.org/w/index.php?title=Artiste_Test&oldid=1',
+      }),
+    ).toBe(
+      wikipediaStoryKey({
+        ...story('artist'),
+        sourceUrl: 'https://fr.wikipedia.org/wiki/Artiste_Test?oldid=999',
+      }),
+    );
+  });
+
+  it('écarte une biographie ordinaire et conserve uniquement les récits qui dépassent le seuil', async () => {
+    await ensureDailyFeed(own, NOW);
+    const api = sources();
+    api.wikipedia.mockImplementation(async ({ kind }) => [
+      {
+        ...story(kind),
+        text: 'Cet artiste est un chanteur français né le 12 juin 1950 à Paris. Son premier album paraît en 1980, suivi par un deuxième en 1981 et un troisième en 1982.',
+      },
+    ]);
+    await enrichDailyFeed(own, DAY, api, NOW);
+    const page = await getFeedPage(own, undefined, NOW, 100);
+    expect(page.items.some(({ kind }) => kind === 'album' || kind === 'artist')).toBe(false);
+    expect(page.items.some(({ kind }) => kind === 'listen')).toBe(true);
+    expect(page.status).toBe('ready');
+  });
   it('conserve la sélection et ses identifiants au rechargement et ne révèle aucune collection privée', async () => {
     await Promise.all([ensureDailyFeed(own, NOW), ensureDailyFeed(own, NOW)]);
     const first = await getFeedPage(own, undefined, NOW);

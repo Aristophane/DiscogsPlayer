@@ -31,13 +31,15 @@ describe('sources du fil', () => {
     ).toEqual([]);
   });
 
-  it('retient un paragraphe d’enregistrement sans inventer une anecdote', () => {
-    const intro = 'Cet album est une œuvre musicale. '.repeat(5);
-    const studio = 'Les séances en studio ont eu lieu en janvier avec plusieurs musiciens. '.repeat(
-      4,
-    );
-    expect(selectWikipediaExcerpt(`${intro}\n\n${studio}`, 'album')).toBe(studio.trim());
-    expect(selectWikipediaExcerpt(`${intro}\n\n${studio}`, 'artist')).toBe(intro.trim());
+  it('privilégie une histoire de studio et refuse un simple portrait biographique', () => {
+    const intro =
+      'Orbite est un groupe de rock français fondé à Paris. Ses membres ont publié plusieurs albums et effectué des tournées en Europe.';
+    const studio =
+      'Pendant l’enregistrement du disque, une panne de courant interrompt la séance. Le groupe décide de conserver le bruit de cet accident sur la bande et en fait le début du morceau.';
+    const article = `${intro}\n\n== Enregistrement ==\n\n${studio}`;
+    expect(selectWikipediaExcerpt(article, 'album')).toBe(studio);
+    expect(selectWikipediaExcerpt(article, 'artist')).toBe(studio);
+    expect(selectWikipediaExcerpt(intro, 'artist')).toBe('');
   });
 
   it('ne rapproche pas les artistes par sous-chaîne ou nom trop ambigu', () => {

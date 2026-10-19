@@ -90,7 +90,7 @@ test.afterAll(async () => {
   await sql.end();
 });
 
-test('le fil se déplie, cite ses sources et reste accessible sur chaque écran', async ({
+test('le fil affiche plusieurs publications, se déplie et reste accessible sur chaque écran', async ({
   page,
 }, testInfo) => {
   await page.goto('/');
@@ -101,15 +101,34 @@ test('le fil se déplie, cite ses sources et reste accessible sur chaque écran'
   await expect(page.getByText(/Les disques que vous aimez ont des histoires/)).toHaveCount(0);
   const cover = await page.locator('[data-feed-cover]').first().boundingBox();
   const article = await page.getByRole('article').first().boundingBox();
-  expect(cover!.width).toBeGreaterThan(250);
-  expect(Math.abs(cover!.x + cover!.width / 2 - article!.x - article!.width / 2)).toBeLessThan(2);
+  const smallScreen = page.viewportSize()!.width < 640;
+  expect(cover!.width).toBe(smallScreen ? 104 : 160);
+  expect(cover!.x).toBeLessThan(article!.x + article!.width / 3);
+  const visible = await page.getByRole('article').evaluateAll((nodes) => {
+    const headerBottom = document.querySelector('header')!.getBoundingClientRect().bottom;
+    const bounds = nodes.map((node) => node.getBoundingClientRect());
+    return {
+      complete: bounds.filter(({ top, bottom }) => top >= headerBottom && bottom <= innerHeight)
+        .length,
+      started: bounds.filter(({ top, bottom }) => top < innerHeight && bottom > headerBottom)
+        .length,
+    };
+  });
+  expect(visible.complete).toBeGreaterThanOrEqual(2);
+  expect(visible.started).toBeGreaterThanOrEqual(3);
   await page.screenshot({ path: testInfo.outputPath('feed.png'), fullPage: false });
   const first = page.getByRole('article').first();
+  const collapsedHeight = (await first.boundingBox())!.height;
+  const secondTop = (await page.getByRole('article').nth(1).boundingBox())!.y;
   await first.getByRole('button', { name: 'Voir plus', exact: true }).click();
   await expect(first.getByRole('button', { name: 'Réduire' })).toHaveAttribute(
     'aria-expanded',
     'true',
   );
+  expect((await first.boundingBox())!.height).toBeGreaterThan(collapsedHeight);
+  await first.getByRole('button', { name: 'Réduire', exact: true }).click();
+  expect((await page.getByRole('article').nth(1).boundingBox())!.y).toBeCloseTo(secondTop, 0);
+  await first.getByRole('button', { name: 'Voir plus', exact: true }).click();
   await expect(first.getByRole('link', { name: /Source de démonstration/ })).toHaveAttribute(
     'href',
     'https://fr.wikipedia.org/wiki/Musique',
@@ -152,7 +171,10 @@ test('le fil protège son historique, exige une session et valide les curseurs',
   );
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await expect(page.getByRole('article')).toHaveCount(19);
-  const friendCard = page.getByRole('article').nth(15);
+  // Keep enough content below the anchor on tall tablets with the compact layout.
+  // This still anchors beyond the first page of twelve posts.
+  const friendCard = page.getByRole('article').nth(13);
+  await friendCard.getByRole('button', { name: 'Voir plus', exact: true }).click();
   const savedFriendId = (await friendCard.getAttribute('data-feed-id'))!;
   await friendCard.evaluate((node) => {
     const headerBottom = document.querySelector('header')!.getBoundingClientRect().bottom;

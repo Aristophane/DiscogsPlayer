@@ -8,8 +8,10 @@ import { AlbumCover } from '@/modules/collection/components/album-cover';
 import { PersonalReleaseLink } from '@/modules/collection/components/personal-release-link';
 import { coverProxyUrl } from '@/modules/collection/cover';
 import { usePlayback } from '@/modules/playback/playback-context';
+import type { AnecdoteTopic } from '../anecdotes';
 import { feedPageSchema, type FeedItem, type FeedPage } from '../contracts';
 import { useFeedReadingPosition } from '../use-feed-reading-position';
+import styles from './home-feed.module.css';
 
 const LABELS: Record<FeedItem['kind'], MessageKey> = {
   addition: 'feed.kind.addition',
@@ -18,6 +20,13 @@ const LABELS: Record<FeedItem['kind'], MessageKey> = {
   album: 'feed.kind.album',
   artist: 'feed.kind.artist',
   news: 'feed.kind.news',
+};
+const TOPIC_LABELS: Record<AnecdoteTopic, MessageKey> = {
+  recording: 'feed.topic.recording',
+  artwork: 'feed.topic.artwork',
+  name: 'feed.topic.name',
+  unexpected: 'feed.topic.unexpected',
+  milestone: 'feed.topic.milestone',
 };
 const dateFormat = new Intl.DateTimeFormat('fr-FR', {
   dateStyle: 'long',
@@ -52,7 +61,7 @@ function FeedCard({
         : t(item.ownerUsername ? 'feed.listenFriend' : 'feed.listenOwn', {
             username: item.ownerUsername ?? '',
           }));
-  const canExpand = text.length > 220;
+  const canExpand = text.length > 140;
 
   async function act(action: 'play' | 'stats') {
     setPending(true);
@@ -79,36 +88,40 @@ function FeedCard({
   return (
     <article
       data-feed-id={item.id}
-      className="min-w-0 px-4 py-5 sm:px-6 sm:py-6"
+      className={styles.card}
       aria-labelledby={`post-title-${item.id}`}
     >
-      <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
-        <span className="font-medium text-foreground">{t(LABELS[item.kind])}</span>
-        <span aria-hidden="true">·</span>
-        <span className="break-words">
-          {item.ownerUsername
-            ? t('feed.collectionOf', { username: item.ownerUsername })
-            : t('feed.yourCollection')}
-        </span>
-        {story?.language === 'en' ? (
-          <span lang="en" className="ml-auto text-[10px] uppercase tracking-wider">
-            EN
+      <div className={styles.heading}>
+        <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+          <span className="font-medium text-foreground">
+            {t(story?.editorial ? TOPIC_LABELS[story.editorial.topic] : LABELS[item.kind])}
           </span>
-        ) : null}
+          <span aria-hidden="true">·</span>
+          <span className="break-words">
+            {item.ownerUsername
+              ? t('feed.collectionOf', { username: item.ownerUsername })
+              : t('feed.yourCollection')}
+          </span>
+          {story?.language === 'en' ? (
+            <span lang="en" className="ml-auto text-[10px] uppercase tracking-wider">
+              EN
+            </span>
+          ) : null}
+        </div>
+        <h2
+          id={`post-title-${item.id}`}
+          lang={story?.language}
+          className="break-words text-base font-semibold leading-snug tracking-tight sm:text-lg"
+        >
+          {story?.title ?? item.title}
+        </h2>
+        <p className="mt-1 break-words text-xs leading-relaxed text-muted">
+          {item.artists}
+          {story ? ` · ${item.title}` : ''}
+          {item.year ? ` · ${item.year}` : ''}
+        </p>
       </div>
-      <h2
-        id={`post-title-${item.id}`}
-        lang={story?.language}
-        className="break-words text-lg font-semibold leading-snug tracking-tight"
-      >
-        {story?.title ?? item.title}
-      </h2>
-      <p className="mt-1 break-words text-xs leading-relaxed text-muted">
-        {item.artists}
-        {story ? ` · ${item.title}` : ''}
-        {item.year ? ` · ${item.year}` : ''}
-      </p>
-      <div data-feed-cover className="mx-auto my-4 w-full max-w-md">
+      <div data-feed-cover className={styles.cover}>
         <PersonalReleaseLink
           releaseId={item.discogsReleaseId}
           ownerId={item.ownerId}
@@ -125,31 +138,24 @@ function FeedCard({
           </div>
         </PersonalReleaseLink>
       </div>
-      {item.kind === 'stat' && item.statistic?.price ? (
-        <p className="mt-3 text-xl font-semibold tabular-nums">
-          {t('home.highlights.price', { price: euros.format(Number(item.statistic.price)) })}
-        </p>
-      ) : null}
-      <p
-        id={`post-text-${item.id}`}
-        lang={story?.language}
-        className={`mt-3 whitespace-pre-line break-words text-sm leading-relaxed ${canExpand && !expanded ? 'line-clamp-3' : ''}`}
-      >
-        {text}
-      </p>
-      {canExpand ? (
-        <button
-          type="button"
-          aria-expanded={expanded}
-          aria-controls={`post-text-${item.id}`}
-          onClick={onToggle}
-          className="mt-1 min-h-9 text-sm font-medium underline decoration-border underline-offset-4"
+      <div className={styles.story}>
+        {item.kind === 'stat' && item.statistic?.price ? (
+          <p className="mb-1 text-xl font-semibold tabular-nums">
+            {t('home.highlights.price', { price: euros.format(Number(item.statistic.price)) })}
+          </p>
+        ) : null}
+        <p
+          id={`post-text-${item.id}`}
+          lang={story?.language}
+          className={`whitespace-pre-line break-words text-sm leading-relaxed ${canExpand && !expanded ? 'line-clamp-3' : ''}`}
         >
-          {t(expanded ? 'feed.collapse' : 'feed.expand')}
-        </button>
-      ) : null}
+          {text}
+        </p>
+      </div>
       {story ? (
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+        <div
+          className={`${styles.sources} flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted`}
+        >
           <a
             href={story.sourceUrl}
             target="_blank"
@@ -176,11 +182,22 @@ function FeedCard({
         </div>
       ) : null}
       {item.kind === 'addition' && item.addedAt ? (
-        <p className="mt-3 text-xs text-muted">
+        <p className={`${styles.sources} text-xs text-muted`}>
           <time dateTime={item.addedAt}>{dateFormat.format(new Date(item.addedAt))}</time>
         </p>
       ) : null}
-      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
+      <div className={`${styles.actions} flex flex-wrap items-center gap-x-5 gap-y-1 text-xs`}>
+        {canExpand ? (
+          <button
+            type="button"
+            aria-expanded={expanded}
+            aria-controls={`post-text-${item.id}`}
+            onClick={onToggle}
+            className="min-h-10 font-medium underline decoration-border underline-offset-4"
+          >
+            {t(expanded ? 'feed.collapse' : 'feed.expand')}
+          </button>
+        ) : null}
         <button
           type="button"
           disabled={pending}
@@ -212,7 +229,7 @@ function FeedCard({
         ) : null}
       </div>
       {error ? (
-        <p role="alert" className="mt-2 text-xs text-muted">
+        <p role="alert" className={`${styles.error} text-xs text-muted`}>
           {t('sharing.error')}
         </p>
       ) : null}
