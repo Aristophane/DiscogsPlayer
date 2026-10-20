@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { and, eq, inArray, lt, sql } from 'drizzle-orm';
+import { and, eq, getTableColumns, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/db/client';
 import { feedEditions, feedPosts, feedSourceCache } from '@/db/schema';
@@ -18,11 +18,46 @@ import {
   type FeedPage,
   type SourceStory,
 } from './contracts';
-import { fetchMusicNews, fetchWikipediaStory, newsMentionsArtist } from './sources';
+import { fetchMusicNews, fetchWikipediaStory, newsMentionsArtist, plainText } from './sources';
 import { ANECDOTE_VERSION, MIN_ANECDOTE_SCORE, selectWikipediaAnecdotes } from './anecdotes';
 
 export const TASK_REFRESH_FEED = 'feed.refresh_daily';
 const PAGE_SIZE = 12;
+const DAY_MS = 86_400_000;
+// Storage positions stay immutable; this separate display order puts stories first.
+const displayRank = sql<number>`case ${feedPosts.content}->>'kind'
+  when 'artist' then 0 when 'album' then 0 when 'news' then 1
+  when 'addition' then 2 when 'listen' then 3 else 4 end`;
+// Apply the same limits to old editions, without deleting history or changing IDs.
+const displayEligible = sql`case ${feedPosts.content}->>'kind'
+  when 'listen' then not exists (
+    select 1 from feed_posts prior where prior.user_id = ${feedPosts.userId}
+    and prior.content->>'kind' = 'listen'
+    and ((prior.day = ${feedPosts.day} and prior.position < ${feedPosts.position})
+      or (prior.day < ${feedPosts.day} and prior.day >= (${feedPosts.day}::date - 14)::text
+        and (prior.content->>'artists' = ${feedPosts.content}->>'artists'
+          or prior.discogs_release_id = ${feedPosts.discogsReleaseId}))))
+  when 'stat' then not exists (
+    select 1 from feed_posts prior where prior.user_id = ${feedPosts.userId}
+    and prior.content->>'kind' = 'stat'
+    and ((prior.day = ${feedPosts.day} and prior.position < ${feedPosts.position})
+      or (prior.day < ${feedPosts.day} and prior.day > (${feedPosts.day}::date - 7)::text)))
+  when 'addition' then (
+    not exists (select 1 from feed_posts prior where prior.user_id = ${feedPosts.userId}
+      and prior.day = ${feedPosts.day} and prior.content->>'kind' = 'addition'
+      and prior.content->>'artists' = ${feedPosts.content}->>'artists'
+      and prior.position < ${feedPosts.position})
+    and (select count(distinct prior.content->>'artists') from feed_posts prior
+      where prior.user_id = ${feedPosts.userId} and prior.day = ${feedPosts.day}
+      and prior.content->>'kind' = 'addition' and prior.position <= ${feedPosts.position}) <= 2)
+  when 'news' then not exists (
+    select 1 from feed_posts prior where prior.user_id = ${feedPosts.userId}
+    and prior.day = ${feedPosts.day} and prior.content->>'kind' = 'news'
+    and prior.content->>'artists' = ${feedPosts.content}->>'artists'
+    and ((prior.content->'story'->>'language' = 'fr' and ${feedPosts.content}->'story'->>'language' <> 'fr')
+      or (prior.content->'story'->>'language' = ${feedPosts.content}->'story'->>'language'
+        and prior.position < ${feedPosts.position})))
+  else true end`;
 const log = moduleLogger('feed');
 type Candidate = Awaited<ReturnType<typeof listFeedCandidates>>[number];
 const artistRefsSchema = z.array(
@@ -49,7 +84,8 @@ export function wikipediaStoryKey(story: SourceStory): string {
 }
 
 function curatedStory(story: SourceStory): SourceStory | null {
-  if (story.kind === 'news') return story;
+  if (story.kind === 'news')
+    return { ...story, title: plainText(story.title), text: plainText(story.text) };
   if (story.editorial?.version === ANECDOTE_VERSION)
     return story.editorial.score >= MIN_ANECDOTE_SCORE ? story : null;
   const anecdote = selectWikipediaAnecdotes(story.text, story.kind, story.language)[0];
@@ -171,34 +207,56 @@ async function addLocalPosts(userId: string, day: string, now: Date) {
     seen.add(item.discogsReleaseId);
     return true;
   });
+  const previous = await db
+    .select({ content: feedPosts.content, key: feedPosts.contentKey, day: feedPosts.day })
+    .from(feedPosts)
+    .where(
+      and(
+        eq(feedPosts.userId, userId),
+        sql`${feedPosts.day} >= ${feedDay(new Date(now.getTime() - 14 * DAY_MS))}`,
+      ),
+    );
+  const recent = previous.flatMap((row) => {
+    const parsed = feedContentSchema.safeParse(row.content);
+    return parsed.success ? [{ ...row, content: parsed.data }] : [];
+  });
+  const additionKey = (item: Candidate) =>
+    `addition:${item.ownerId}:${item.discogsReleaseId}:${item.addedAt}`;
+  const publishedKeys = new Set(previous.map(({ key }) => key));
+  const additionArtists = new Set<string>();
   const additions = candidates
     .filter(
       (item) =>
         item.ownerId !== userId &&
         item.addedAt &&
         new Date(item.addedAt).getTime() <= now.getTime() &&
-        new Date(item.addedAt).getTime() > now.getTime() - 14 * 86_400_000,
+        new Date(item.addedAt).getTime() > now.getTime() - 14 * DAY_MS &&
+        !publishedKeys.has(additionKey(item)),
     )
     .sort((a, b) => (b.addedAt ?? '').localeCompare(a.addedAt ?? ''))
-    .slice(0, 4);
-  const featured: Candidate[] = [];
-  for (const ownerId of ownerIds) {
-    const item = selected.find((candidate) => candidate.ownerId === ownerId);
-    if (item) featured.push(item);
-    if (featured.length === 4) break;
-  }
-  for (const item of selected) {
-    if (featured.length === 4) break;
-    if (!featured.includes(item)) featured.push(item);
-  }
+    .filter((item) => {
+      if (additionArtists.has(item.artists)) return false;
+      additionArtists.add(item.artists);
+      return true;
+    })
+    .slice(0, 2);
+  const featured = selected
+    .filter(
+      (item) =>
+        !additions.some(({ artists }) => artists === item.artists) &&
+        !recent.some(
+          ({ content: post }) => post.kind === 'listen' && post.artists === item.artists,
+        ),
+    )
+    .slice(0, 1);
   const posts: { candidate: Candidate; content: FeedContent; key: string }[] = [];
-  for (let index = 0; index < 4; index++) {
+  for (let index = 0; index < 2; index++) {
     const addition = additions[index];
     if (addition)
       posts.push({
         candidate: addition,
         content: content(addition, names, 'addition'),
-        key: `addition:${addition.ownerId}:${addition.discogsReleaseId}:${addition.addedAt}`,
+        key: additionKey(addition),
       });
     const suggestion = featured[index];
     if (suggestion)
@@ -212,7 +270,13 @@ async function addLocalPosts(userId: string, day: string, now: Date) {
     .filter((item) => item.price !== null && Number(item.price) > 0)
     .sort((a, b) => Number(b.price) - Number(a.price));
   const stat = ranked[0];
-  if (stat)
+  if (
+    stat &&
+    !recent.some(
+      (row) =>
+        row.content.kind === 'stat' && row.day > feedDay(new Date(now.getTime() - 7 * DAY_MS)),
+    )
+  )
     posts.push({
       candidate: stat,
       content: content(stat, names, 'stat'),
@@ -236,14 +300,19 @@ export async function ensureDailyFeed(userId: string, now = new Date()): Promise
     .from(feedEditions)
     .where(and(eq(feedEditions.userId, userId), eq(feedEditions.day, day)))
     .limit(1);
-  if (edition && edition.editorialVersion < ANECDOTE_VERSION && edition.status !== 'pending')
+  const upgrade = !!edition && edition.editorialVersion < ANECDOTE_VERSION;
+  const retry =
+    !!edition &&
+    edition.status === 'partial' &&
+    edition.enrichmentAttempts < 3 &&
+    !!edition.retryAt &&
+    edition.retryAt <= now;
+  if (edition && (upgrade || retry) && edition.status !== 'pending')
     await db
       .update(feedEditions)
-      .set({ status: 'pending' })
-      .where(
-        and(eq(feedEditions.id, edition.id), lt(feedEditions.editorialVersion, ANECDOTE_VERSION)),
-      );
-  if (edition && (edition.status === 'pending' || edition.editorialVersion < ANECDOTE_VERSION))
+      .set({ status: 'pending', ...(upgrade ? { enrichmentAttempts: 0 } : {}) })
+      .where(eq(feedEditions.id, edition.id));
+  if (edition && (edition.status === 'pending' || upgrade || retry))
     await enqueue({
       type: TASK_REFRESH_FEED,
       payload: { userId, day },
@@ -286,10 +355,17 @@ async function cachedStories(
     const stories = z.array(sourceStorySchema).parse(await load());
     await db
       .insert(feedSourceCache)
-      .values({ key, content: stories, expiresAt: new Date(now.getTime() + ttlMs) })
+      .values({
+        key,
+        content: stories,
+        expiresAt: new Date(now.getTime() + (stories.length ? ttlMs : DAY_MS)),
+      })
       .onConflictDoUpdate({
         target: feedSourceCache.key,
-        set: { content: stories, expiresAt: new Date(now.getTime() + ttlMs) },
+        set: {
+          content: stories,
+          expiresAt: new Date(now.getTime() + (stories.length ? ttlMs : DAY_MS)),
+        },
       });
     return { stories, failed: false };
   } catch {
@@ -323,31 +399,54 @@ export async function enrichDailyFeed(
   let partial = false;
   const subjects = new Set<string>();
   const pool: { candidate: Candidate; story: SourceStory; subjectKey: string; key: string }[] = [];
+  const artistSubjects: { candidate: Candidate; kind: 'artist' | 'album'; id: string }[] = [];
+  const albumSubjects: typeof artistSubjects = [];
   for (const candidate of candidates) {
     const refs = artistRefsSchema.safeParse(candidate.artistRefs);
-    const subjectsForRelease: { kind: 'album' | 'artist'; id: string }[] = [];
+    if (refs.success)
+      for (const ref of refs.data) {
+        const key = `artist:${ref.id}`;
+        if (!subjects.has(key)) {
+          subjects.add(key);
+          artistSubjects.push({ candidate, kind: 'artist', id: ref.id });
+        }
+      }
     if (candidate.masterId && /^[1-9]\d*$/.test(candidate.masterId))
-      subjectsForRelease.push({ kind: 'album', id: candidate.masterId });
-    if (refs.success && refs.data[0])
-      subjectsForRelease.push({ kind: 'artist', id: refs.data[0].id });
-    for (const subject of subjectsForRelease) {
-      const key = `wiki:v2:${subject.kind}:${subject.id}`;
-      if (subjects.has(key) || subjects.size >= 6) continue;
-      subjects.add(key);
-      const result = await cachedStories(
-        key,
-        () => sources.wikipedia(subject),
-        now,
-        30 * 86_400_000,
-      );
+      if (!subjects.has(`album:${candidate.masterId}`)) {
+        subjects.add(`album:${candidate.masterId}`);
+        albumSubjects.push({ candidate, kind: 'album', id: candidate.masterId });
+      }
+  }
+  // Explore artists across the collection before spending requests on album masters.
+  // Two requests at a time and a deadline keep this below the worker's lock timeout.
+  const queue = [...artistSubjects.slice(0, 12), ...albumSubjects.slice(0, 4)];
+  const started = Date.now();
+  for (let offset = 0; offset < queue.length; offset += 2) {
+    if (Date.now() - started > 75_000) {
+      partial = true;
+      break;
+    }
+    const batch = await Promise.all(
+      queue.slice(offset, offset + 2).map(async ({ candidate, kind, id }) => {
+        const subject = { kind, id };
+        const key = `wiki:v3:${kind}:${id}`;
+        const result = await cachedStories(
+          key,
+          () => sources.wikipedia(subject),
+          now,
+          30 * 86_400_000,
+        );
+        return { candidate, kind, key, result };
+      }),
+    );
+    for (const { candidate, kind, key, result } of batch) {
       partial ||= result.failed;
       for (const source of result.stories.slice(0, 3)) {
-        if (source.kind !== subject.kind) continue;
+        if (source.kind !== kind) continue;
         const story = curatedStory(source);
         if (story) pool.push({ candidate, story, subjectKey: key, key: wikipediaStoryKey(story) });
       }
     }
-    if (subjects.size >= 6) break;
   }
   const previous = pool.length
     ? await db
@@ -419,7 +518,11 @@ export async function enrichDailyFeed(
     6 * 3_600_000,
   );
   partial ||= news.failed;
-  for (const story of news.stories) {
+  const newsArtists = new Set<string>();
+  for (const source of [...news.stories].sort(
+    (a, b) => Number(b.language === 'fr') - Number(a.language === 'fr'),
+  )) {
+    const story = curatedStory(source)!;
     if (story.publishedAt && feedDay(new Date(story.publishedAt)) > day) continue;
     const candidate = candidates.find((item) => {
       const refs = artistRefsSchema.safeParse(item.artistRefs);
@@ -427,7 +530,8 @@ export async function enrichDailyFeed(
         refs.success && refs.data.some((artist) => newsMentionsArtist(story.title, artist.name))
       );
     });
-    if (!candidate) continue;
+    if (!candidate || newsArtists.has(candidate.artists)) continue;
+    newsArtists.add(candidate.artists);
     records.push({
       candidate,
       content: { ...content(candidate, names, 'news'), story },
@@ -438,14 +542,24 @@ export async function enrichDailyFeed(
   await appendPosts(userId, day, records);
   await db
     .update(feedEditions)
-    .set({ status: partial ? 'partial' : 'ready', editorialVersion: ANECDOTE_VERSION })
+    .set({
+      status: partial ? 'partial' : 'ready',
+      editorialVersion: ANECDOTE_VERSION,
+      enrichmentAttempts: sql`${feedEditions.enrichmentAttempts} + 1`,
+      retryAt: partial ? new Date(now.getTime() + 15 * 60_000) : null,
+    })
     .where(eq(feedEditions.id, edition.id));
 }
 
 export async function markFeedPartial(userId: string, day: string) {
   await db
     .update(feedEditions)
-    .set({ status: 'partial', editorialVersion: ANECDOTE_VERSION })
+    .set({
+      status: 'partial',
+      editorialVersion: ANECDOTE_VERSION,
+      enrichmentAttempts: sql`${feedEditions.enrichmentAttempts} + 1`,
+      retryAt: new Date(Date.now() + 15 * 60_000),
+    })
     .where(and(eq(feedEditions.userId, userId), eq(feedEditions.day, day)));
 }
 
@@ -470,6 +584,20 @@ export async function getFeedPage(
       });
     }
   }
+  if (cursor && cursor.rank === undefined) {
+    const [anchor] = await db
+      .select({ rank: displayRank })
+      .from(feedPosts)
+      .where(
+        and(
+          eq(feedPosts.userId, userId),
+          eq(feedPosts.day, cursor.day),
+          eq(feedPosts.position, cursor.position),
+        ),
+      )
+      .limit(1);
+    cursor.rank = anchor?.rank ?? 4;
+  }
   const day = feedDay(now);
   const { ownerIds } = await scope(userId);
   const items: FeedPage['items'] = [];
@@ -477,20 +605,22 @@ export async function getFeedPage(
   // Les éléments retirés ou révoqués ne doivent ni fuiter ni bloquer la pagination.
   for (let batch = 0; batch < 10; batch++) {
     const after = cursor
-      ? sql`(${feedPosts.day} < ${cursor.day} or (${feedPosts.day} = ${cursor.day} and ${feedPosts.position} > ${cursor.position}))`
+      ? sql`(${feedPosts.day} < ${cursor.day} or (${feedPosts.day} = ${cursor.day}
+          and (${displayRank} > ${cursor.rank} or (${displayRank} = ${cursor.rank} and ${feedPosts.position} > ${cursor.position}))))`
       : sql`true`;
     const rows = await db
-      .select()
+      .select({ ...getTableColumns(feedPosts), displayRank })
       .from(feedPosts)
       .where(
         and(
           eq(feedPosts.userId, userId),
           inArray(feedPosts.ownerId, ownerIds),
           sql`${feedPosts.day} <= ${day}`,
+          displayEligible,
           after,
         ),
       )
-      .orderBy(sql`${feedPosts.day} desc`, feedPosts.position)
+      .orderBy(sql`${feedPosts.day} desc`, displayRank, feedPosts.position)
       .limit(50);
     const visible = new Set(
       (
@@ -502,8 +632,12 @@ export async function getFeedPage(
     );
     for (let index = 0; index < rows.length; index++) {
       const row = rows[index]!;
-      cursor = { day: row.day, position: row.position };
       const parsed = feedContentSchema.safeParse(row.content);
+      cursor = {
+        day: row.day,
+        position: row.position,
+        rank: row.displayRank,
+      };
       if (
         parsed.success &&
         parsed.data.story?.sourceName === 'Wikipédia' &&
@@ -513,6 +647,8 @@ export async function getFeedPage(
         if (!story) continue;
         parsed.data.story = story;
       }
+      if (parsed.success && parsed.data.story?.kind === 'news')
+        parsed.data.story = curatedStory(parsed.data.story);
       if (visible.has(`${row.ownerId}:${row.discogsReleaseId}`) && parsed.success)
         items.push({
           ...parsed.data,

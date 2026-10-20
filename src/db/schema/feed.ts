@@ -23,6 +23,8 @@ export const feedEditions = pgTable(
     day: text('day').notNull(),
     status: text('status').$type<'pending' | 'ready' | 'partial'>().notNull().default('pending'),
     editorialVersion: integer('editorial_version').notNull().default(0),
+    enrichmentAttempts: integer('enrichment_attempts').notNull().default(0),
+    retryAt: timestamp('retry_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [uniqueIndex('feed_editions_user_day_key').on(table.userId, table.day)],

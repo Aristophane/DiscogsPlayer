@@ -27,6 +27,7 @@ const NOW = new Date('2026-10-17T12:00:00Z');
 const DAY = '2026-10-17';
 const USER_IDS = ['test-feed-own', 'test-feed-friend', 'test-feed-private'];
 const RELEASE_IDS = Array.from({ length: 24 }, (_, n) => `test-feed-${n}`);
+const ARTIST_IDS = Array.from({ length: 8 }, (_, n) => String(997740001 + n));
 let own: string;
 let friend: string;
 let stranger: string;
@@ -41,7 +42,7 @@ async function cleanup() {
     await db.delete(tasks).where(like(tasks.dedupeKey, `feed:${id}:%`));
   await db.delete(users).where(inArray(users.discogsUserId, USER_IDS));
   await db.delete(discogsReleases).where(inArray(discogsReleases.discogsReleaseId, RELEASE_IDS));
-  await db.delete(discogsArtists).where(eq(discogsArtists.discogsArtistId, '997740001'));
+  await db.delete(discogsArtists).where(inArray(discogsArtists.discogsArtistId, ARTIST_IDS));
   await db
     .delete(feedSourceCache)
     .where(
@@ -50,6 +51,8 @@ async function cleanup() {
         'wiki:album:997740002',
         'wiki:v2:artist:997740001',
         'wiki:v2:album:997740002',
+        ...ARTIST_IDS.map((id) => `wiki:v3:artist:${id}`),
+        'wiki:v3:album:997740002',
         'music-news',
       ]),
     );
@@ -128,6 +131,176 @@ const sources = () => ({
 });
 
 describe('fil quotidien personnel', () => {
+  it('cherche au-delà des trois premiers artistes même si leurs articles ne donnent rien', async () => {
+    const artists = await db
+      .insert(discogsArtists)
+      .values(
+        ARTIST_IDS.slice(1).map((id, n) => ({
+          discogsArtistId: id,
+          name: `Artiste de test ${n}`,
+          nameNormalized: `artiste de test ${n}`,
+        })),
+      )
+      .returning();
+    await db
+      .delete(discogsReleaseArtists)
+      .where(inArray(discogsReleaseArtists.releaseId, releaseIds));
+    const [first] = await db
+      .select()
+      .from(discogsArtists)
+      .where(eq(discogsArtists.discogsArtistId, ARTIST_IDS[0]!));
+    const allArtists = [first!, ...artists];
+    await db.insert(discogsReleaseArtists).values(
+      releaseIds.map((releaseId, n) => ({
+        releaseId,
+        artistId: allArtists[n % 8]!.id,
+        position: 0,
+      })),
+    );
+    let artistsChecked = 0;
+    const api = sources();
+    api.wikipedia.mockImplementation(async ({ kind }) =>
+      kind === 'artist' && ++artistsChecked === 8 ? [story('artist')] : [],
+    );
+    await ensureDailyFeed(own, NOW);
+    await enrichDailyFeed(own, DAY, api, NOW);
+    expect(artistsChecked).toBe(8);
+    const page = await getFeedPage(own, undefined, NOW);
+    expect(page.items[0]!.kind).toBe('artist');
+    expect(page.items[0]!.story?.text).toBe(story('artist').text);
+    expect(
+      api.wikipedia.mock.calls.slice(0, 8).every(([subject]) => subject.kind === 'artist'),
+    ).toBe(true);
+  });
+
+  it('nettoie les anciennes éditions et déduplique deux actualités du même artiste en préférant le français', async () => {
+    await ensureDailyFeed(own, NOW);
+    const api = sources();
+    api.news.mockResolvedValue([
+      { ...story('news'), sourceUrl: 'https://www.theguardian.com/music/test', language: 'en' },
+      {
+        ...story('news'),
+        sourceUrl: 'https://www.lemonde.fr/musiques/test',
+        text: '&lt;p&gt;Un concert.&lt;/p&gt;',
+      },
+    ]);
+    await enrichDailyFeed(own, DAY, api, NOW);
+    const [edition] = await db.select().from(feedEditions).where(eq(feedEditions.userId, own));
+    const base: FeedContent = {
+      kind: 'listen',
+      title: 'Suggestion répétitive',
+      artists: 'Artiste Exemple',
+      coverUrl: null,
+      year: null,
+      ownerUsername: null,
+      addedAt: null,
+      story: null,
+      statistic: null,
+    };
+    await db.insert(feedPosts).values(
+      Array.from({ length: 8 }, (_, n) => ({
+        editionId: edition!.id,
+        userId: own,
+        ownerId: own,
+        discogsReleaseId: RELEASE_IDS[n]!,
+        day: DAY,
+        position: 100 + n,
+        contentKey: `legacy-listen:${n}`,
+        content: base,
+      })),
+    );
+    const page = await getFeedPage(own, undefined, NOW, 100);
+    expect(page.items.filter(({ kind }) => kind === 'listen')).toHaveLength(1);
+    expect(page.items.filter(({ kind }) => kind === 'addition')).toHaveLength(1);
+    const news = page.items.filter(({ kind }) => kind === 'news');
+    expect(news).toHaveLength(1);
+    expect(news[0]!.story).toMatchObject({ language: 'fr', text: 'Un concert.' });
+    expect(
+      page.items
+        .slice(0, 2)
+        .map(({ kind }) => kind)
+        .sort(),
+    ).toEqual(['album', 'artist']);
+    expect(page.items[2]!.kind).toBe('news');
+    const first = await getFeedPage(own, undefined, NOW, 1);
+    const [anchor] = await db.select().from(feedPosts).where(eq(feedPosts.id, first.items[0]!.id));
+    const oldCursor = Buffer.from(
+      JSON.stringify({ day: DAY, position: anchor!.position }),
+    ).toString('base64url');
+    const following = await getFeedPage(own, oldCursor, NOW, 100);
+    expect([first.items[0]!.id, ...following.items.map(({ id }) => id)]).toEqual(
+      page.items.map(({ id }) => id),
+    );
+  });
+
+  it('espace les prix sur une semaine et ne republie pas le même artiste en suggestion le lendemain', async () => {
+    for (let n = 0; n < 9; n++) {
+      await ensureDailyFeed(own, new Date(NOW.getTime() + n * 86_400_000));
+    }
+    const all = await getFeedPage(own, undefined, new Date(NOW.getTime() + 8 * 86_400_000), 100);
+    expect(all.items.filter(({ kind }) => kind === 'stat')).toHaveLength(2);
+    expect(all.items.filter(({ kind }) => kind === 'listen').length).toBeLessThanOrEqual(1);
+  });
+
+  it('ne perd pas les histoires suivantes lorsqu’un lot de cartes historiques est invalide', async () => {
+    await ensureDailyFeed(own, NOW);
+    const [edition] = await db.select().from(feedEditions).where(eq(feedEditions.userId, own));
+    const base = {
+      editionId: edition!.id,
+      userId: own,
+      ownerId: own,
+      discogsReleaseId: RELEASE_IDS[0]!,
+      day: DAY,
+    };
+    await db.insert(feedPosts).values(
+      Array.from({ length: 50 }, (_, n) => ({
+        ...base,
+        position: 100 + n,
+        contentKey: `invalid:${n}`,
+        content: { kind: 'artist' },
+      })),
+    );
+    await db.insert(feedPosts).values({
+      ...base,
+      position: 150,
+      contentKey: 'valid-after-invalid',
+      content: {
+        kind: 'artist',
+        title: 'Histoire après les lignes invalides',
+        artists: 'Artiste Exemple',
+        coverUrl: null,
+        year: null,
+        ownerUsername: null,
+        addedAt: null,
+        statistic: null,
+        story: story('artist'),
+      },
+    });
+    const page = await getFeedPage(own, undefined, NOW, 100);
+    expect(page.items[0]!.title).toBe('Histoire après les lignes invalides');
+  });
+
+  it('retente une panne après quinze minutes sans boucler à chaque visite', async () => {
+    await ensureDailyFeed(own, NOW);
+    const failing = {
+      wikipedia: vi.fn(async () => {
+        throw new Error('indisponible');
+      }),
+      news: vi.fn(async () => {
+        throw new Error('indisponible');
+      }),
+    };
+    await enrichDailyFeed(own, DAY, failing, NOW);
+    await ensureDailyFeed(own, new Date(NOW.getTime() + 60_000));
+    expect((await getFeedPage(own, undefined, NOW)).status).toBe('partial');
+    const retry = new Date(NOW.getTime() + 16 * 60_000);
+    await ensureDailyFeed(own, retry);
+    expect((await getFeedPage(own, undefined, retry)).status).toBe('pending');
+    await enrichDailyFeed(own, DAY, sources(), retry);
+    expect((await getFeedPage(own, undefined, retry)).items[0]!.story).not.toBeNull();
+    expect((await getFeedPage(own, undefined, retry)).status).toBe('ready');
+  });
+
   it('reconnaît un récit historique malgré son ancienne clé et un nouveau permalien', async () => {
     const previousDay = '2026-10-16';
     const legacyStory: SourceStory = {
@@ -205,7 +378,7 @@ describe('fil quotidien personnel', () => {
     expect(api.wikipedia).toHaveBeenCalledTimes(2);
   });
 
-  it('met à niveau l’édition courante et ignore les anciens extraits en cache sans déplacer les publications', async () => {
+  it('met à niveau l’édition courante et place les histoires avant les suggestions existantes', async () => {
     await ensureDailyFeed(own, NOW);
     await db
       .update(feedEditions)
@@ -228,9 +401,11 @@ describe('fil quotidien personnel', () => {
     await enrichDailyFeed(own, DAY, api, NOW);
     const after = await getFeedPage(own, undefined, NOW);
     expect(after.status).toBe('ready');
-    expect(after.items.slice(0, before.items.length).map(({ id }) => id)).toEqual(
-      before.items.map(({ id }) => id),
+    expect(after.items.map(({ id }) => id)).toEqual(
+      expect.arrayContaining(before.items.map(({ id }) => id)),
     );
+    expect(after.items[0]!.story?.kind).not.toBe('news');
+    expect(after.items[0]!.story).not.toBeNull();
     expect(api.wikipedia).toHaveBeenCalledWith({ kind: 'artist', id: '997740001' });
     expect(
       after.items
@@ -290,7 +465,7 @@ describe('fil quotidien personnel', () => {
     await enrichDailyFeed(own, DAY, api, NOW);
     const page = await getFeedPage(own, undefined, NOW, 100);
     expect(page.items.some(({ kind }) => kind === 'album' || kind === 'artist')).toBe(false);
-    expect(page.items.some(({ kind }) => kind === 'listen')).toBe(true);
+    expect(page.items.some(({ kind }) => kind === 'addition')).toBe(true);
     expect(page.status).toBe('ready');
   });
   it('conserve la sélection et ses identifiants au rechargement et ne révèle aucune collection privée', async () => {
@@ -312,15 +487,22 @@ describe('fil quotidien personnel', () => {
     expect((await getFeedPage(stranger, undefined, NOW)).items).toEqual([]);
   });
 
-  it('ajoute les sources sans déplacer les cartes locales, les met en cache et déduplique les actualités', async () => {
+  it('affiche les sources en premier, garde les identifiants locaux et mutualise le cache', async () => {
     await ensureDailyFeed(own, NOW);
     const before = await getFeedPage(own, undefined, NOW);
     const api = sources();
     await enrichDailyFeed(own, DAY, api, NOW);
     const page = await getFeedPage(own, undefined, NOW);
-    expect(page.items.slice(0, before.items.length).map(({ id }) => id)).toEqual(
-      before.items.map(({ id }) => id),
+    expect(page.items.map(({ id }) => id)).toEqual(
+      expect.arrayContaining(before.items.map(({ id }) => id)),
     );
+    expect(
+      page.items
+        .slice(0, 2)
+        .map(({ kind }) => kind)
+        .sort(),
+    ).toEqual(['album', 'artist']);
+    expect(page.items[2]!.kind).toBe('news');
     expect(page.items.some(({ story }) => story?.kind === 'news')).toBe(true);
     expect(page.status).toBe('ready');
     await ensureDailyFeed(friend, NOW);
@@ -338,11 +520,11 @@ describe('fil quotidien personnel', () => {
     const all = [];
     let cursor: string | undefined;
     do {
-      const page = await getFeedPage(own, cursor, NOW);
+      const page = await getFeedPage(own, cursor, NOW, 2);
       all.push(...page.items);
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
-    expect(all.length).toBeGreaterThan(12);
+    expect(all.length).toBeGreaterThan(3);
     expect(new Set(all.map(({ id }) => id)).size).toBe(all.length);
     expect(all.filter(({ kind }) => kind === 'news')).toHaveLength(1);
     await db

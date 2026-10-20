@@ -160,24 +160,35 @@ export const NEWS_SOURCES = [
 ];
 
 export function plainText(value: string): string {
-  const text = value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]*>/g, ' ');
+  let text = value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
+  // RSS often contains escaped HTML, sometimes escaped twice. Decode before stripping.
+  for (let pass = 0; pass < 3; pass++) {
+    text = text.replace(
+      /&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi,
+      (entity, code: string) => {
+        const number = code.toLowerCase().startsWith('#x')
+          ? parseInt(code.slice(2), 16)
+          : code.startsWith('#')
+            ? Number(code.slice(1))
+            : null;
+        if (number !== null)
+          return number > 0 && number <= 0x10ffff && !(number >= 0xd800 && number <= 0xdfff)
+            ? String.fromCodePoint(number)
+            : '';
+        return (
+          (
+            { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' } as Record<
+              string,
+              string
+            >
+          )[code.toLowerCase()] ?? entity
+        );
+      },
+    );
+  }
   return text
-    .replace(/&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi, (entity, code: string) => {
-      const number = code.toLowerCase().startsWith('#x')
-        ? parseInt(code.slice(2), 16)
-        : code.startsWith('#')
-          ? Number(code.slice(1))
-          : null;
-      if (number !== null)
-        return number > 0 && number <= 0x10ffff && !(number >= 0xd800 && number <= 0xdfff)
-          ? String.fromCodePoint(number)
-          : '';
-      return (
-        ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' } as Record<string, string>)[
-          code.toLowerCase()
-        ] ?? entity
-      );
-    })
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, ' ')
+    .replace(/<[^>]*>/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }

@@ -41,7 +41,7 @@ describe('récupération Wikipédia et sélection éditoriale', () => {
       text: anecdote,
       language: 'fr',
       licenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0/',
-      editorial: { version: 1, topic: 'recording', section: 'Enregistrement' },
+      editorial: { version: 2, topic: 'recording', section: 'Enregistrement' },
     });
     expect(stories[0]!.sourceUrl).toBe(
       'https://fr.wikipedia.org/w/index.php?title=Orbite&oldid=123',

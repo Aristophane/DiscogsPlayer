@@ -49,34 +49,31 @@ test.beforeEach(async ({ page }) => {
     await sql`insert into feed_editions (user_id, day, status) values (${ownerId}, ${today}, 'ready') returning id`;
   for (let n = 0; n < 19; n++) {
     const content = {
-      kind: n % 4 === 0 ? 'artist' : n % 4 === 1 ? 'album' : n % 4 === 2 ? 'news' : 'listen',
+      kind: n % 3 === 0 ? 'artist' : n % 3 === 1 ? 'album' : 'news',
       title: 'Un disque à redécouvrir',
-      artists: 'Les artistes de nos collections',
+      artists: `Les artistes de nos collections ${n}`,
       coverUrl: null,
       year: 1999,
       ownerUsername: n % 2 ? 'Camille' : null,
       addedAt: null,
       statistic: null,
-      story:
-        n % 4 === 3
-          ? null
-          : {
-              kind: n % 4 === 0 ? 'artist' : n % 4 === 1 ? 'album' : 'news',
-              title:
-                [
-                  'Dans les coulisses du studio',
-                  'Une autre façon d’écouter',
-                  'Les artistes prennent la parole',
-                ][n % 4] + ` · ${n + 1}`,
-              text: 'Un extrait de démonstration pour découvrir les récits, les portraits et les actualités liés aux disques de nos collections. '.repeat(
-                6,
-              ),
-              sourceName: 'Source de démonstration',
-              sourceUrl: 'https://fr.wikipedia.org/wiki/Musique',
-              language: 'fr',
-              publishedAt: null,
-              licenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0/',
-            },
+      story: {
+        kind: n % 3 === 0 ? 'artist' : n % 3 === 1 ? 'album' : 'news',
+        title:
+          [
+            'Dans les coulisses du studio',
+            'Une autre façon d’écouter',
+            'Les artistes prennent la parole',
+          ][n % 3] + ` · ${n + 1}`,
+        text: 'Un extrait de démonstration pour découvrir les récits, les portraits et les actualités liés aux disques de nos collections. '.repeat(
+          6,
+        ),
+        sourceName: 'Source de démonstration',
+        sourceUrl: 'https://fr.wikipedia.org/wiki/Musique',
+        language: 'fr',
+        publishedAt: null,
+        licenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0/',
+      },
     };
     await sql`insert into feed_posts (edition_id, user_id, owner_id, discogs_release_id, day, position, content_key, content) values (${edition!.id}, ${ownerId}, ${n % 2 ? friendId : ownerId}, ${releaseId}, ${today}, ${n}, ${`test-feed-browser-${n}`}, ${sql.json(content)})`;
   }
@@ -173,7 +170,7 @@ test('le fil protège son historique, exige une session et valide les curseurs',
   await expect(page.getByRole('article')).toHaveCount(19);
   // Keep enough content below the anchor on tall tablets with the compact layout.
   // This still anchors beyond the first page of twelve posts.
-  const friendCard = page.getByRole('article').nth(13);
+  const friendCard = page.getByRole('article').nth(14);
   await friendCard.getByRole('button', { name: 'Voir plus', exact: true }).click();
   const savedFriendId = (await friendCard.getAttribute('data-feed-id'))!;
   await friendCard.evaluate((node) => {

@@ -25,6 +25,7 @@ export const fr = {
   'feed.kind.news': 'Dans la presse',
   'feed.topic.recording': 'En studio',
   'feed.topic.artwork': 'L’histoire de la pochette',
+  'feed.topic.composition': 'D’où vient la chanson',
   'feed.topic.name': 'Derrière le nom',
   'feed.topic.unexpected': 'Le détour inattendu',
   'feed.topic.milestone': 'Une première musicale',
@@ -44,8 +45,9 @@ export const fr = {
   'feed.record': 'Voir le disque',
   'feed.seeStats': 'Explorer les stats',
   'feed.updates': 'De nouveaux récits sont prêts · Afficher',
-  'feed.preparing':
-    'Les récits et les actualités du jour se préparent. Vos suggestions sont déjà disponibles.',
+  'feed.preparing': 'Recherche d’histoires et d’actualités sur les artistes de vos collections…',
+  'feed.noStories':
+    'Aucune nouvelle anecdote suffisamment étayée trouvée aujourd’hui. Les précédents récits restent accessibles dans le fil.',
   'feed.waiting':
     'Les récits arrivent en arrière-plan. Vous pouvez poursuivre votre lecture et revenir plus tard.',
   'feed.partial':

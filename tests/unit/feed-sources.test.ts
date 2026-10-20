@@ -6,9 +6,21 @@ import {
   parseNewsRss,
   selectWikipediaExcerpt,
   wikipediaArticles,
+  plainText,
 } from '@/modules/feed/sources';
 
 describe('sources du fil', () => {
+  it('nettoie aussi le HTML échappé présent dans le flux Guardian et les anciens caches', () => {
+    expect(
+      plainText(
+        '&lt;p&gt;&lt;strong&gt;Utilita Arena, Birmingham&lt;br&gt;&lt;/strong&gt;The opening night &amp; the music.&lt;/p&gt;',
+      ),
+    ).toBe('Utilita Arena, Birmingham The opening night & the music.');
+    expect(plainText('&amp;lt;p&amp;gt;Concert&amp;lt;/p&amp;gt;')).toBe('Concert');
+    expect(plainText('&lt;script&gt;bad()&lt;/script&gt;&lt;p&gt;Concert&lt;/p&gt;')).toBe(
+      'Concert',
+    );
+  });
   it('résout une identité Discogs exacte et privilégie Wikipédia en français', () => {
     const binding = (entity: string, article: string) => ({
       entity: { value: `http://www.wikidata.org/entity/${entity}` },

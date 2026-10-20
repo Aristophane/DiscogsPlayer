@@ -156,6 +156,27 @@ it('annonce les enrichissements sans modifier la lecture avant le clic', async (
   expect(screen.getAllByRole('article')).toHaveLength(2);
 });
 
+it('rend la préparation visible lorsque le fil ne contient encore que des suggestions', () => {
+  const suggestion = { ...item(1), kind: 'listen' as const, story: null };
+  render(
+    <HomeFeed
+      userId={ownerId}
+      initial={page([suggestion], null, 'pending')}
+      activeOwnerId={ownerId}
+    />,
+  );
+  expect(screen.getByRole('status')).toBeVisible();
+  expect(screen.getByRole('status')).not.toHaveClass('sr-only');
+});
+
+it('annonce honnêtement l’absence de nouveau récit au lieu de présenter les suggestions comme des anecdotes', () => {
+  const suggestion = { ...item(1), kind: 'listen' as const, story: null };
+  render(<HomeFeed userId={ownerId} initial={page([suggestion])} activeOwnerId={ownerId} />);
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Aucune nouvelle anecdote suffisamment étayée',
+  );
+});
+
 it('ne charge pas la position de lecture d’un autre compte', async () => {
   localStorage.setItem(
     'dp:feed-reading:00000000-0000-4000-8000-000000000099',

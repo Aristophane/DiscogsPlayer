@@ -20,7 +20,7 @@ export const sourceStorySchema = z.object({
   licenseUrl: httpsUrl.nullable(),
   editorial: z
     .object({
-      version: z.literal(1),
+      version: z.union([z.literal(1), z.literal(2)]),
       score: z.number().int().min(0).max(100),
       topic: z.enum(ANECDOTE_TOPICS),
       section: z.string().max(200).nullable(),
@@ -77,4 +77,5 @@ export function feedDay(now = new Date()): string {
 export const feedCursorSchema = z.object({
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   position: z.number().int().nonnegative().max(2_147_483_647),
+  rank: z.number().int().min(0).max(4).optional(),
 });

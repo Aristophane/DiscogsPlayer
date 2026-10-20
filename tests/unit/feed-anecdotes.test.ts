@@ -12,6 +12,67 @@ const name =
   'Le nom du groupe est né d’une plaisanterie entre les musiciens. Un ami avait mal compris leur ancien nom sur une affiche et ce surnom inattendu finit par remplacer le nom officiel.';
 
 describe('sélection des anecdotes Wikipédia', () => {
+  it('respecte les paragraphes séparés par un seul retour à la ligne dans TextExtracts', () => {
+    const article = `== Histoire ==\nLe groupe a publié des dizaines de disques. La date du premier concert reste incertaine [référence nécessaire].\n${recording}\nUne chronologie ordinaire sans histoire.`;
+    expect(selectWikipediaAnecdotes(article, 'artist')[0]?.text).toBe(recording);
+  });
+  it('ne sacrifie pas tout un long paragraphe à une réserve portant sur une autre phrase', () => {
+    const article = `== Histoire ==\nLa date du premier concert reste incertaine [référence nécessaire]. ${recording}`;
+    expect(selectWikipediaAnecdotes(article, 'artist')[0]?.text).toBe(recording);
+  });
+
+  it('écarte aussi les décès et les récompenses en français', () => {
+    expect(
+      selectWikipediaAnecdotes(
+        'En 1983, le batteur de ce groupe se noie accidentellement à Los Angeles. Cependant, la mort du musicien ne va pas sonner le glas de la formation.',
+        'artist',
+      ),
+    ).toEqual([]);
+    expect(
+      selectWikipediaAnecdotes(
+        'Le 13 octobre 2016, à la surprise générale, le prix Nobel de littérature est attribué à un chanteur pour avoir créé de nouvelles expressions poétiques.',
+        'artist',
+      ),
+    ).toEqual([]);
+  });
+
+  it('distingue une adaptation identifiée d’un commentaire vague sur les influences', () => {
+    const adaptation =
+      'L’une des chansons du groupe, Le Voyage, est une adaptation d’un ancien chant de marins. Le compositeur décide de reprendre la mélodie en changeant complètement son rythme.';
+    expect(selectWikipediaAnecdotes(adaptation, 'artist')[0]?.topic).toBe('composition');
+    expect(
+      selectWikipediaAnecdotes(
+        'Le musicien a inventé une nouvelle manière d’écrire des chansons. Inspirés par la littérature et la poésie, ses textes dessinent un univers intérieur d’une grande richesse.',
+        'artist',
+      ),
+    ).toEqual([]);
+  });
+  it('ne coupe pas un titre après une abréviation prise pour une fin de phrase', () => {
+    const text =
+      'Paul Exemple écoute le disque du groupe en boucle et raconte son admiration pour cette musique. Le disque devient une source d’inspiration pour créer Sgt. Example and the Orchestra, publié quelques années plus tard.';
+    const [selected] = selectWikipediaAnecdotes(text, 'artist');
+    expect(selected).toBeDefined();
+    expect(selected!.text).toContain('Sgt. Example and the Orchestra');
+    expect(selected!.text).not.toMatch(/Sgt\.$/);
+  });
+  it('écarte les noms de rues et un extrait de critique sans titre, signalés dans le fil réel', () => {
+    // Extraits fournis par l’utilisateur, conservés comme cas de régression.
+    const street =
+      'Mechanic Street, where he grew up with his family, has the honorary title of Count Basie Way. In 2009, Edgecombe Avenue and 160th Street in Washington Heights, Manhattan, were renamed as Paul Robeson Boulevard and Count Basie Place.';
+    const review =
+      'Charlie Gillett called it "one of the first records to flaunt studio production as a quality in its own right, rather than as a means of presenting a performance". Brian used Electro-Theremin for the track. Upon release, the single prompted an unexpected revival in theremins while increasing awareness of analog synthesizers, leading Moog Music to produce their own brand of ribbon-controlled instruments.';
+    expect(selectWikipediaAnecdotes(street, 'artist', 'en')).toEqual([]);
+    expect(selectWikipediaAnecdotes(review, 'artist', 'en')).toEqual([]);
+  });
+
+  it('retient une technique concrète sans exiger une panne ou un accident', () => {
+    const technique =
+      'Pour enregistrer ce disque, le groupe utilise des instruments de fortune fabriqués avec des boîtes métalliques. Le percussionniste transforme ainsi des objets du quotidien en une batterie dont le son devient la signature du groupe.';
+    expect(selectWikipediaAnecdotes(technique, 'artist')[0]).toMatchObject({
+      topic: 'recording',
+      text: technique,
+    });
+  });
   it('choisit un incident de studio avant une introduction encyclopédique', () => {
     const article = `${biography}\n\n== Enregistrement ==\n\n${recording}`;
     const [selected] = selectWikipediaAnecdotes(article, 'album');

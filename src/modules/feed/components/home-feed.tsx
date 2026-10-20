@@ -24,6 +24,7 @@ const LABELS: Record<FeedItem['kind'], MessageKey> = {
 const TOPIC_LABELS: Record<AnecdoteTopic, MessageKey> = {
   recording: 'feed.topic.recording',
   artwork: 'feed.topic.artwork',
+  composition: 'feed.topic.composition',
   name: 'feed.topic.name',
   unexpected: 'feed.topic.unexpected',
   milestone: 'feed.topic.milestone',
@@ -342,7 +343,7 @@ export function HomeFeed({
         /* Le fil local reste lisible pendant une panne des sources ou du worker. */
       } finally {
         busy = false;
-        if (++polls >= 12) {
+        if (++polls >= 24) {
           clearInterval(timer);
           if (!controller.signal.aborted) setWaiting(true);
         }
@@ -379,9 +380,18 @@ export function HomeFeed({
       {status === 'pending' ? (
         <p
           role="status"
-          className={items.length ? 'sr-only' : 'px-4 py-4 text-xs leading-relaxed text-muted'}
+          className={
+            items.some(({ story }) => story)
+              ? 'sr-only'
+              : 'px-4 py-4 text-xs leading-relaxed text-muted'
+          }
         >
           {t(waiting ? 'feed.waiting' : 'feed.preparing')}
+        </p>
+      ) : null}
+      {status === 'ready' && items.length > 0 && !items.some(({ story }) => story) ? (
+        <p role="status" className="px-4 py-4 text-xs leading-relaxed text-muted">
+          {t('feed.noStories')}
         </p>
       ) : null}
       <ol className="divide-y divide-border">
