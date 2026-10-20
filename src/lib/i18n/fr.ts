@@ -223,6 +223,15 @@ export const fr = {
   // Fiche album (§7.4)
   'release.backToCollection': 'Retour à la collection',
   'release.tracklist': 'Pistes',
+  'release.marketplace.title': 'Vente sur Discogs',
+  'release.marketplace.lowestPrice': 'Prix minimum proposé',
+  'release.marketplace.forSale': 'Exemplaires en vente',
+  'release.marketplace.none':
+    'Aucun exemplaire en vente pour cette édition lors du dernier relevé.',
+  'release.marketplace.noPrice': 'Prix indisponible',
+  'release.marketplace.hint':
+    'Annonces pour cette édition, hors livraison. Le prix dépend de l’état des exemplaires proposés ; il ne représente ni une vente conclue ni une estimation de votre disque.',
+  'release.marketplace.viewListings': 'Voir les annonces sur Discogs (nouvel onglet)',
   'release.notFound': 'Cet album n’est pas dans votre collection.',
   'release.details.year': 'Année',
   'release.details.country': 'Pays',

@@ -149,6 +149,7 @@ describe('tops personnels et compteurs', () => {
       communityHave: 0,
       communityWant: 0,
       lowestPriceEur: null,
+      numForSale: 0,
     });
   });
 
@@ -178,6 +179,7 @@ describe('tops personnels et compteurs', () => {
       communityHave: 77,
       communityWant: 88,
       lowestPriceEur: '123.45',
+      numForSale: 2,
     });
     expect(refreshed?.tracks[0]?.id).toBe(release?.tracks[0]?.id);
     expect(

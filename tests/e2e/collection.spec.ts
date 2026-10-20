@@ -89,6 +89,9 @@ test.beforeAll(async () => {
     `;
   }
 
+  await sql`update discogs_releases set lowest_price_eur = 42.50, num_for_sale = 3, statistics_fetched_at = now() where discogs_release_id = ${R(1)}`;
+  await sql`update discogs_releases set lowest_price_eur = 99, num_for_sale = 0, statistics_fetched_at = now() where discogs_release_id = ${R(2)}`;
+
   // Session créée directement : le parcours OAuth exigerait un appel réel à Discogs,
   // que §22.3 interdit en test.
   token = randomBytes(32).toString('base64url');
@@ -211,6 +214,16 @@ test('la fiche album est accessible et navigable au clavier', async ({ page }, t
   await expect(page.getByRole('heading', { name: 'Ágætis Byrjun', level: 1 })).toBeVisible();
   await expect(page.getByText('Sigur Rós')).toBeVisible();
 
+  const marketplace = page.getByRole('region', { name: 'Vente sur Discogs' });
+  await expect(marketplace.getByText(/42,50\s*€/)).toBeVisible();
+  await expect(marketplace.getByText('3', { exact: true })).toBeVisible();
+  await expect(
+    marketplace.getByRole('link', { name: /Voir les annonces sur Discogs/ }),
+  ).toHaveAttribute('href', `https://www.discogs.com/sell/release/${R(1)}?currency=EUR`);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+
   // §4.2 : la fiche n'affiche que ce qui est déjà connu et ne déclenche aucune
   // résolution — le bouton play est présent, mais rien n'est joué avant qu'on y clique
   // (Lot 6 : le bloc de texte "Disponibilité" a été retiré au profit de ce bouton).
@@ -228,6 +241,23 @@ test('la fiche album est accessible et navigable au clavier', async ({ page }, t
     body: await page.screenshot({ fullPage: true }),
     contentType: 'image/png',
   });
+});
+
+test('la fiche distingue une édition sans annonces et des données de vente inconnues', async ({
+  page,
+}) => {
+  await signIn(page);
+  await page.goto(`/sorties/${R(2)}`);
+  const marketplace = page.getByRole('region', { name: 'Vente sur Discogs' });
+  await expect(marketplace.getByText(/Aucun exemplaire en vente/)).toBeVisible();
+  await expect(marketplace.getByText('0', { exact: true })).toBeVisible();
+  await expect(marketplace.getByText('Prix indisponible')).toBeVisible();
+  await expect(marketplace.getByText(/99,00/)).toHaveCount(0);
+
+  await page.goto(`/sorties/${R(3)}`);
+  await expect(marketplace.getByText('Donnée indisponible')).toBeVisible();
+  await expect(marketplace.getByText('Prix indisponible')).toBeVisible();
+  await expect(marketplace.getByText(/Aucun exemplaire en vente/)).toHaveCount(0);
 });
 
 test('un album absent de la collection renvoie une page 404 lisible', async ({ page }) => {

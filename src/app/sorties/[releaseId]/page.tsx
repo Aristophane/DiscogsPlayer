@@ -10,6 +10,7 @@ import {
 } from '@/modules/catalog/release-service';
 import { TracklistPending } from '@/modules/catalog/components/tracklist-pending';
 import { CommunityStats } from '@/modules/catalog/components/community-stats';
+import { MarketplaceStats } from '@/modules/catalog/components/marketplace-stats';
 import { AlbumCover } from '@/modules/collection/components/album-cover';
 import { coverProxyUrl } from '@/modules/collection/cover';
 import { PlayButton } from '@/modules/playback/components/play-button';
@@ -132,6 +133,13 @@ export default async function ReleasePage({ params }: { params: Promise<{ releas
           </dl>
         </div>
       </header>
+
+      <MarketplaceStats
+        discogsReleaseId={release.discogsReleaseId}
+        lowestPriceEur={release.lowestPriceEur}
+        numForSale={release.numForSale}
+        statisticsFetchedAt={release.statisticsFetchedAt}
+      />
 
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-medium">{t('release.tracklist')}</h2>

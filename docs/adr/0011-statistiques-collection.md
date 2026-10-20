@@ -29,4 +29,10 @@ sans effet. Pour les supprimer, sauvegarder leurs données puis retirer uniqueme
 `community_have`, `community_want`, `lowest_price_eur`, `num_for_sale` et
 `statistics_fetched_at` de `discogs_releases` dans une nouvelle migration.
 
+Extension produit du 19 octobre 2026 : la fiche album affiche aussi le prix minimum
+en euros, le nombre d’exemplaires en vente, la date du relevé et un lien vers les
+annonces Discogs de l’édition exacte. Elle utilise les mêmes données synchronisées,
+y compris pour la collection amie active. Zéro annonce reste distinct d’un nombre
+inconnu ; aucun ancien prix n’est affiché lorsqu’il n’y a plus d’annonces.
+
 Référence : https://minim.readthedocs.io/en/latest/_modules/minim/discogs.html#API.get_release
