@@ -27,9 +27,9 @@ test.beforeAll(async () => {
   await sql`insert into collection_shares (owner_id, grantee_id) values (${friendId}, ${ownerId})`;
   for (let n = 1; n <= 13; n++) {
     const [release] = await sql`insert into discogs_releases
-      (discogs_release_id, title, artists_text, title_normalized, community_have, community_want, lowest_price_eur, num_for_sale, details_fetched_at, statistics_fetched_at)
+      (discogs_release_id, title, artists_text, title_normalized, community_have, community_want, lowest_price_eur, num_for_sale, details_fetched_at, statistics_fetched_at, community_rating, community_rating_count, community_rating_fetched_at)
       values (${R(n)}, ${n === 7 ? 'Album de mon ami' : `Édition ${n}`}, 'Artiste des statistiques', ${`edition ${n}`},
-      ${n === 1 ? null : n * 10}, ${n === 1 ? 0 : n * 100}, ${n * 25.5}, 2, now(), now()) returning id`;
+      ${n === 1 ? null : n * 10}, ${n === 1 ? 0 : n * 100}, ${n * 25.5}, 2, now(), now(), ${n === 1 ? null : 1 + n * 0.3}, ${n === 1 ? 0 : n * 10}, now()) returning id`;
     await sql`insert into collection_instances (user_id, release_id, discogs_instance_id, date_added) values
       (${n >= 7 ? friendId : ownerId}, ${release!.id}, ${`test-stats-instance-${n}`}, ${new Date(Date.UTC(2026, 0, 20 - n))})`;
   }
@@ -91,6 +91,33 @@ test('les tops personnels sont classés, accessibles et sans débordement', asyn
   await expect(page.getByRole('heading', { name: 'Édition 6', exact: true })).toBeVisible();
   await expect(page.getByRole('main').getByText('En collection', { exact: true })).toBeVisible();
   await expect(page.getByRole('main').getByText('En wantlist', { exact: true })).toBeVisible();
+});
+
+test('les notes figurent sur les fiches et dans les deux classements', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/stats');
+  const best = page.getByRole('region', { name: 'Les mieux notés', exact: true });
+  const worst = page.getByRole('region', { name: 'Les moins bien notés', exact: true });
+  await expect(best.getByRole('listitem')).toHaveCount(5);
+  await expect(worst.getByRole('listitem')).toHaveCount(5);
+  await expect(best.getByRole('listitem').first()).toContainText('Édition 6');
+  await expect(worst.getByRole('listitem').first()).toContainText('Édition 2');
+  await expect(best.getByRole('listitem').first()).toContainText('2,80 / 5');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.screenshot({ path: testInfo.outputPath('ratings-stats.png'), fullPage: true });
+  await best.screenshot({ path: testInfo.outputPath('best-ratings.png') });
+  await best.getByRole('link').first().click();
+  await expect(page).toHaveURL(new RegExp(`/sorties/${R(6)}$`));
+  await expect(page.getByRole('heading', { name: 'Édition 6', exact: true })).toBeVisible();
+  await expect(page.getByText('Note de la communauté Discogs')).toBeVisible();
+  await expect(page.getByText(/2,80 \/ 5/)).toBeVisible();
+  await expect(page.getByText(/60 vote/)).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('rating-release.png'), fullPage: true });
+  await page.goto(`/sorties/${R(1)}`);
+  await expect(page.getByText('Aucun vote pour cette édition.')).toBeVisible();
 });
 
 test('les classements et la barre progressent automatiquement toutes les cinq secondes', async ({

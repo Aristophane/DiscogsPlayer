@@ -11,6 +11,7 @@ import { createSession } from '@/modules/radio/service';
 export const dynamic = 'force-dynamic';
 
 const bodySchema = z.object({
+  includeFriends: z.boolean().optional(),
   genres: z.array(z.string().max(80)).max(20).optional(),
   styles: z.array(z.string().max(80)).max(20).optional(),
 });
@@ -38,7 +39,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       });
     }
 
-    const session = await createSession(user.id, user.activeCollectionOwnerId, parsed.data);
+    const session = await createSession(user.id, user.id, parsed.data);
 
     return NextResponse.json(session, {
       status: 201,

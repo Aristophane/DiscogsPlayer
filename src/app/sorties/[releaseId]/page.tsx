@@ -10,12 +10,16 @@ import {
 } from '@/modules/catalog/release-service';
 import { TracklistPending } from '@/modules/catalog/components/tracklist-pending';
 import { CommunityStats } from '@/modules/catalog/components/community-stats';
+import { CommunityRating } from '@/modules/catalog/components/community-rating';
 import { MarketplaceStats } from '@/modules/catalog/components/marketplace-stats';
 import { AlbumCover } from '@/modules/collection/components/album-cover';
 import { coverProxyUrl } from '@/modules/collection/cover';
 import { PlayButton } from '@/modules/playback/components/play-button';
 import { ViewingAsBanner } from '@/modules/sharing/components/viewing-as-banner';
-import { requestPriorityReleaseFetch } from '@/modules/sync/service';
+import {
+  requestPriorityReleaseFetch,
+  requestReleaseStatisticsRefresh,
+} from '@/modules/sync/service';
 
 /**
  * Fiche album (§7.4).
@@ -53,6 +57,7 @@ export default async function ReleasePage({ params }: { params: Promise<{ releas
     // passer cette édition devant la file d'import en arrière-plan (Lot 6bis).
     await requestPriorityReleaseFetch(release.discogsReleaseId);
   }
+  await requestReleaseStatisticsRefresh(release.discogsReleaseId);
 
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-4 py-8 sm:px-6">
@@ -80,6 +85,12 @@ export default async function ReleasePage({ params }: { params: Promise<{ releas
           <p className="text-lg text-muted">{release.artists}</p>
           <div className="border-y border-border py-3 my-2">
             <CommunityStats have={release.communityHave} want={release.communityWant} />
+            <div className="mt-3">
+              <CommunityRating
+                average={release.communityRating}
+                count={release.communityRatingCount}
+              />
+            </div>
             {release.statisticsFetchedAt ? (
               <p className="mt-2 text-xs text-muted">
                 {t('statistics.updated', {

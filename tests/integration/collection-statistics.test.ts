@@ -122,6 +122,73 @@ describe('tops personnels et compteurs', () => {
     );
   });
 
+  it('classe les notes dans les deux sens, départage par les votes et exclut les absences et éditions inactives', async () => {
+    const ratings = [
+      null,
+      [0, 0],
+      [4.5, 3],
+      [4.5, 100],
+      [1.25, 20],
+      [5, 1],
+      [4.8, 10],
+      [2, 40],
+      [5, 200],
+      [3, 60],
+    ] as const;
+    for (let n = 1; n <= ratings.length; n++) {
+      const rating = ratings[n - 1];
+      await applyReleaseStatistics({
+        id: Number(R(n)),
+        title: 'Album',
+        community: { rating: rating ? { average: rating[0], count: rating[1] } : null },
+      });
+    }
+    const result = await getCollectionHighlights(ownerId);
+    expect(result.bestRated.map((item) => item.discogsReleaseId)).toEqual([6, 7, 4, 3, 8].map(R));
+    expect(result.worstRated.map((item) => item.discogsReleaseId)).toEqual([5, 8, 4, 3, 7].map(R));
+    expect(new Set(result.bestRated.map((item) => item.discogsReleaseId)).size).toBe(5);
+    expect(
+      (await getCollectionHighlights(friendId)).bestRated.map((item) => item.discogsReleaseId),
+    ).toEqual([R(10)]);
+    expect(await getReleaseForUser(ownerId, R(4))).toMatchObject({
+      communityRating: 4.5,
+      communityRatingCount: 100,
+    });
+    expect(await getReleaseForUser(ownerId, R(2))).toMatchObject({
+      communityRating: null,
+      communityRatingCount: 0,
+    });
+    expect(await listStaleCollectionStatistics(ownerId)).toEqual([]);
+  });
+
+  it('récupère les notes des albums importés avant la migration même si leurs autres statistiques sont fraîches', async () => {
+    await db
+      .update(discogsReleases)
+      .set({ communityRatingFetchedAt: null })
+      .where(eq(discogsReleases.discogsReleaseId, R(1)));
+    expect(await listStaleCollectionStatistics(ownerId)).toEqual([R(1)]);
+    expect(await getCollectionHighlights(ownerId)).toMatchObject({ fresh: 7, total: 8 });
+    await requestCollectionStatisticsRefresh(ownerId);
+    const [task] = await db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.dedupeKey, `${TASK_FETCH_STATISTICS}:${R(1)}`));
+    const original = await getReleaseForUser(ownerId, R(1));
+    const api: DiscogsApi = {
+      getRelease: vi.fn(async () => ({
+        id: Number(R(1)),
+        title: 'Album',
+        community: { rating: { average: 4.85, count: 128 } },
+      })),
+      getCollectionPage: vi.fn(),
+    };
+    await runTask(task!, api);
+    const release = await getReleaseForUser(ownerId, R(1));
+    expect(release).toMatchObject({ communityRating: 4.85, communityRatingCount: 128 });
+    expect(release?.tracks[0]?.id).toBe(original?.tracks[0]?.id);
+    expect(await listStaleCollectionStatistics(ownerId)).toEqual([]);
+  });
+
   it('exclut les prix sans annonces, les inconnus et les zéros du top, sans confondre zéro et absence', async () => {
     for (const n of [4, 5, 6, 7, 8]) {
       await applyReleaseStatistics({

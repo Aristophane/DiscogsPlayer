@@ -33,6 +33,7 @@ export const radioSessions = pgTable(
     collectionOwnerId: uuid('collection_owner_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    includeFriends: boolean('include_friends').notNull().default(false),
     filterGenres: text('filter_genres')
       .array()
       .notNull()

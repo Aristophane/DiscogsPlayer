@@ -13,7 +13,11 @@ import { and, eq, gt, isNull, ne, or, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { collectionInstances, syncRuns, users } from '@/db/schema';
 import { moduleLogger } from '@/lib/logger';
-import { selectStaleReleaseIds, upsertReleaseSummary } from '@/modules/catalog/service';
+import {
+  releaseStatisticsAreFresh,
+  selectStaleReleaseIds,
+  upsertReleaseSummary,
+} from '@/modules/catalog/service';
 import { getDiscogsTokens } from '@/modules/auth/service';
 import { listStaleCollectionStatistics } from '@/modules/collection/service';
 
@@ -28,6 +32,12 @@ export const TASK_FETCH_STATISTICS = 'discogs.fetch_statistics';
 
 export async function requestCollectionStatisticsRefresh(userId: string): Promise<void> {
   await enqueueBackgroundBatch(TASK_FETCH_STATISTICS, await listStaleCollectionStatistics(userId));
+}
+
+export async function requestReleaseStatisticsRefresh(discogsReleaseId: string): Promise<void> {
+  if (!(await releaseStatisticsAreFresh(discogsReleaseId))) {
+    await enqueueBackgroundBatch(TASK_FETCH_STATISTICS, [discogsReleaseId]);
+  }
 }
 
 /** SYNC-003 : une actualisation automatique au plus toutes les 24 heures. */

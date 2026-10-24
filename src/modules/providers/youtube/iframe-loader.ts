@@ -26,7 +26,7 @@ declare global {
           events?: {
             onReady?: (event: { target: YtPlayer }) => void;
             onStateChange?: (event: { data: number; target: YtPlayer }) => void;
-            onError?: (event: { data: number }) => void;
+            onError?: (event: { data: number; target: YtPlayer }) => void;
           };
         },
       ) => YtPlayer;
@@ -57,16 +57,29 @@ export function loadYoutubeIframeApi(): Promise<void> {
     return Promise.resolve();
   }
 
-  apiPromise ??= new Promise((resolve) => {
+  apiPromise ??= new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error('Délai de chargement YouTube dépassé')),
+      10_000,
+    );
     const previous = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = () => {
+      clearTimeout(timeout);
       previous?.();
       resolve();
     };
 
     const script = document.createElement('script');
     script.src = 'https://www.youtube.com/iframe_api';
+    script.onerror = () => {
+      clearTimeout(timeout);
+      script.remove();
+      reject(new Error('Chargement YouTube impossible'));
+    };
     document.head.appendChild(script);
+  }).catch((error) => {
+    apiPromise = null;
+    throw error;
   });
 
   return apiPromise;

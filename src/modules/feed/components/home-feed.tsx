@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { t, type MessageKey } from '@/lib/i18n';
 import { AlbumCover } from '@/modules/collection/components/album-cover';
+import { CommunityRating } from '@/modules/catalog/components/community-rating';
 import { PersonalReleaseLink } from '@/modules/collection/components/personal-release-link';
 import { coverProxyUrl } from '@/modules/collection/cover';
 import { usePlayback } from '@/modules/playback/playback-context';
@@ -58,7 +59,7 @@ function FeedCard({
     (item.kind === 'addition'
       ? t('feed.additionText', { username: item.ownerUsername ?? '' })
       : item.kind === 'stat'
-        ? t('feed.statText')
+        ? t(item.statistic?.metric === 'rating' ? 'feed.ratingText' : 'feed.statText')
         : t(item.ownerUsername ? 'feed.listenFriend' : 'feed.listenOwn', {
             username: item.ownerUsername ?? '',
           }));
@@ -140,7 +141,15 @@ function FeedCard({
         </PersonalReleaseLink>
       </div>
       <div className={styles.story}>
-        {item.kind === 'stat' && item.statistic?.price ? (
+        {item.kind === 'stat' && item.statistic?.metric === 'rating' ? (
+          <div className="mb-3">
+            <CommunityRating
+              average={item.statistic.rating ?? null}
+              count={item.statistic.ratingCount ?? null}
+            />
+          </div>
+        ) : null}
+        {item.kind === 'stat' && item.statistic?.metric !== 'rating' && item.statistic?.price ? (
           <p className="mb-1 text-xl font-semibold tabular-nums">
             {t('home.highlights.price', { price: euros.format(Number(item.statistic.price)) })}
           </p>

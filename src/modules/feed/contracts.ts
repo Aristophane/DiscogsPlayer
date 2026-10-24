@@ -43,6 +43,9 @@ export const feedContentSchema = z.object({
       price: z.string().nullable(),
       have: z.number().nullable(),
       want: z.number().nullable(),
+      metric: z.enum(['price', 'rating']).optional(),
+      rating: z.number().min(0).max(5).nullable().optional(),
+      ratingCount: z.number().int().nonnegative().nullable().optional(),
     })
     .nullable(),
 });

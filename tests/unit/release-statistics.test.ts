@@ -16,7 +16,7 @@ describe('statistiques de la réponse Discogs', () => {
         JSON.stringify({
           id: 12,
           title: 'Album',
-          community: { have: 0, want: 1250 },
+          community: { have: 0, want: 1250, rating: { average: 4.72, count: 124 } },
           lowest_price: 42.5,
           num_for_sale: 3,
         }),
@@ -24,7 +24,7 @@ describe('statistiques de la réponse Discogs', () => {
     );
     vi.stubGlobal('fetch', fetcher);
     expect(await liveDiscogsApi.getRelease('12')).toMatchObject({
-      community: { have: 0, want: 1250 },
+      community: { have: 0, want: 1250, rating: { average: 4.72, count: 124 } },
       lowest_price: 42.5,
       num_for_sale: 3,
     });
@@ -35,6 +35,8 @@ describe('statistiques de la réponse Discogs', () => {
     {},
     { community: null, lowest_price: null, num_for_sale: null },
     { community: { have: null, want: 0 } },
+    { community: { rating: null } },
+    { community: { rating: { average: 0, count: 0 } } },
   ])('tolère des statistiques absentes : %j', async (stats) => {
     vi.stubGlobal(
       'fetch',
@@ -43,18 +45,20 @@ describe('statistiques de la réponse Discogs', () => {
     await expect(liveDiscogsApi.getRelease('12')).resolves.toMatchObject({ id: 12 });
   });
 
-  it.each([{ community: { have: -1 } }, { community: { want: '12' } }, { lowest_price: -5 }])(
-    'rejette les valeurs malformées : %j',
-    async (stats) => {
-      vi.stubGlobal(
-        'fetch',
-        vi
-          .fn()
-          .mockResolvedValue(new Response(JSON.stringify({ id: 12, title: 'Album', ...stats }))),
-      );
-      await expect(liveDiscogsApi.getRelease('12')).rejects.toMatchObject({
-        code: 'DISCOGS_RELEASE_SHAPE',
-      });
-    },
-  );
+  it.each([
+    { community: { have: -1 } },
+    { community: { want: '12' } },
+    { lowest_price: -5 },
+    { community: { rating: { average: 6, count: 5 } } },
+    { community: { rating: { average: '4.5', count: 5 } } },
+    { community: { rating: { average: 4.5, count: -1 } } },
+  ])('rejette les valeurs malformées : %j', async (stats) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 12, title: 'Album', ...stats }))),
+    );
+    await expect(liveDiscogsApi.getRelease('12')).rejects.toMatchObject({
+      code: 'DISCOGS_RELEASE_SHAPE',
+    });
+  });
 });

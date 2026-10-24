@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 import { t } from '@/lib/i18n';
 import { usePlayback } from '@/modules/playback/playback-context';
@@ -12,12 +12,23 @@ type Facet = { value: string; count: number };
  * lecture — contrairement au mode Aléatoire, aucune étape intermédiaire n'est nécessaire,
  * le bouton lance directement le lecteur.
  */
-export function RadioLauncher({ facets }: { facets: { genres: Facet[]; styles: Facet[] } }) {
+type RadioFacets = { genres: Facet[]; styles: Facet[] };
+
+export function RadioLauncher({
+  facets,
+  friendsFacets,
+}: {
+  facets: RadioFacets;
+  friendsFacets: RadioFacets;
+}) {
   const { playFromRadio, state } = usePlayback();
+  const sourceId = useId();
   const [genres, setGenres] = useState<string[]>([]);
   const [styles, setStyles] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const [includeFriends, setIncludeFriends] = useState(false);
+  const selectedFacets = includeFriends ? friendsFacets : facets;
 
   function toggle(list: string[], setList: (next: string[]) => void, value: string) {
     setList(list.includes(value) ? list.filter((item) => item !== value) : [...list, value]);
@@ -31,7 +42,8 @@ export function RadioLauncher({ facets }: { facets: { genres: Facet[]; styles: F
       const response = await fetch('/api/radio-sessions', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ genres, styles }),
+        body: JSON.stringify({ genres, styles, includeFriends }),
+        signal: AbortSignal.timeout(20_000),
       });
 
       if (!response.ok) {
@@ -52,6 +64,37 @@ export function RadioLauncher({ facets }: { facets: { genres: Facet[]; styles: F
 
   return (
     <div className="flex flex-col gap-6">
+      <fieldset disabled={busy} className="grid gap-3 sm:grid-cols-2">
+        <legend className="mb-3 text-lg font-medium">{t('radio.source.title')}</legend>
+        {[false, true].map((friends) => (
+          <label
+            key={String(friends)}
+            className={`flex cursor-pointer items-start gap-3 rounded-md border p-4 focus-within:outline-2 focus-within:outline-offset-2 ${includeFriends === friends ? 'border-current bg-surface' : 'border-border'}`}
+          >
+            <input
+              type="radio"
+              name="radio-source"
+              aria-labelledby={`${sourceId}-${friends}-title`}
+              aria-describedby={`${sourceId}-${friends}-hint`}
+              checked={includeFriends === friends}
+              onChange={() => {
+                setIncludeFriends(friends);
+                setGenres([]);
+                setStyles([]);
+              }}
+              className="mt-1 accent-current"
+            />
+            <span>
+              <span id={`${sourceId}-${friends}-title`} className="block font-medium">
+                {t(friends ? 'radio.source.friends' : 'radio.source.mine')}
+              </span>
+              <span id={`${sourceId}-${friends}-hint`} className="mt-1 block text-sm text-muted">
+                {t(friends ? 'radio.source.friends.hint' : 'radio.source.mine.hint')}
+              </span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
       {/* Au-dessus des filtres (demande produit 2026-09-03) : lancer la radio est
           l'action principale de cet écran, les filtres n'en sont qu'un réglage. */}
       <button
@@ -75,13 +118,13 @@ export function RadioLauncher({ facets }: { facets: { genres: Facet[]; styles: F
         <h2 className="text-lg font-medium">{t('radio.filters.title')}</h2>
         <FacetGroup
           legend={t('collection.filters.genres')}
-          facets={facets.genres}
+          facets={selectedFacets.genres}
           selected={genres}
           onToggle={(value) => toggle(genres, setGenres, value)}
         />
         <FacetGroup
           legend={t('collection.filters.styles')}
-          facets={facets.styles}
+          facets={selectedFacets.styles}
           selected={styles}
           onToggle={(value) => toggle(styles, setStyles, value)}
         />

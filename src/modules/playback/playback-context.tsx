@@ -64,6 +64,8 @@ type PlaybackContextValue = {
   playFromRadio: (radioSessionId: string) => Promise<void>;
   /** Passe à la suite : piste suivante de l'album, ou tirage suivant en Radio. */
   skip: () => void;
+  previous: () => void;
+  canGoBack: boolean;
   /** Coupure du son du lecteur YouTube — sans effet sur l'Embed Spotify (§ commentaire). */
   muted: boolean;
   toggleMute: () => void;
@@ -97,17 +99,24 @@ type ResolutionResponse = {
 };
 
 async function postJson(url: string, body: unknown): Promise<ResolutionResponse | null> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) return null;
+    return (await response.json()) as ResolutionResponse;
+  } catch {
     return null;
   }
+}
 
-  return (await response.json()) as ResolutionResponse;
+/** Une panne transitoire du tirage ne doit pas bloquer l'enchaînement. */
+async function fetchRadioDraw(sessionId: string): Promise<ResolutionResponse> {
+  const url = `/api/radio-sessions/${sessionId}/draws`;
+  return (await postJson(url, {})) ?? (await postJson(url, {})) ?? { status: 'unavailable' };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -145,6 +154,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // choisie explicitement ailleurs (playTrack/playAlbum) efface cette ref — quitter la
   // Radio en cliquant autre chose est le comportement attendu, pas un mode à confirmer.
   const activeRadioSessionRef = useRef<string | null>(null);
+  const radioHistoryRef = useRef<ResolutionResponse[]>([]);
+  const radioPositionRef = useRef(-1);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const resetRadioHistory = useCallback(() => {
+    radioHistoryRef.current = [];
+    radioPositionRef.current = -1;
+    setCanGoBack(false);
+  }, []);
   // Incrémenté par toute demande de lecture explicite (playTrack/playAlbum/playFromRadio)
   // ou par `close()`. Le sondage de `playAlbum` pendant un `status: 'pending'` compare ce
   // compteur avant d'appliquer chaque résultat : si l'utilisateur a demandé autre chose
@@ -173,83 +190,111 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // circulaire entre les trois. Le pont passe par une ref plutôt que par un tableau de
   // dépendances impossible à écrire correctement.
   const advanceQueueRef = useRef<() => void>(() => {});
+  const youtubeFailureRef = useRef<() => void>(() => {});
+  const youtubeTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const mountYoutubePlayer = useCallback((videoId: string) => {
     // Capturé de façon synchrone, avant tout `await` : lu dans le même tick que l'appel,
     // donc forcément la valeur en vigueur au moment de CETTE résolution.
     const token = requestTokenRef.current;
+    const watchStartup = () => {
+      clearTimeout(youtubeTimeoutRef.current);
+      if (!activeRadioSessionRef.current) return;
+      youtubeTimeoutRef.current = setTimeout(() => {
+        const current = stateRef.current;
+        if (
+          requestTokenRef.current === token &&
+          current.status === 'playing_youtube' &&
+          current.videoId === videoId
+        ) {
+          youtubeFailureRef.current();
+        }
+      }, 15_000);
+    };
+    watchStartup();
     // Optimiste : corrigé sous peu par le vrai `onStateChange`, mais évite d'afficher
     // « en pause » entre la demande et le premier événement du lecteur.
     setPlaying(true);
 
-    void loadYoutubeIframeApi().then(() => {
-      // Chargement du script YouTube pas instantané au premier appel (vrai réseau) : une
-      // lecture plus récente peut avoir pris le relais entretemps. Sans ce garde, le
-      // montage tardif d'une piste déjà abandonnée pouvait faire réapparaître un lecteur
-      // pour la piste précédente après avoir enchaîné sur une piste sans correspondance
-      // — défaut réel observé en e2e, intermittent car dépendant du réseau.
-      if (requestTokenRef.current !== token) {
-        return;
-      }
+    void loadYoutubeIframeApi()
+      .then(() => {
+        // Chargement du script YouTube pas instantané au premier appel (vrai réseau) : une
+        // lecture plus récente peut avoir pris le relais entretemps. Sans ce garde, le
+        // montage tardif d'une piste déjà abandonnée pouvait faire réapparaître un lecteur
+        // pour la piste précédente après avoir enchaîné sur une piste sans correspondance
+        // — défaut réel observé en e2e, intermittent car dépendant du réseau.
+        if (requestTokenRef.current !== token) {
+          return;
+        }
 
-      if (!window.YT) {
-        return;
-      }
+        if (!window.YT) {
+          return;
+        }
 
-      if (playerRef.current) {
-        playerRef.current.loadVideoById(videoId);
-        return;
-      }
+        if (playerRef.current) {
+          playerRef.current.loadVideoById(videoId);
+          return;
+        }
 
-      const container = youtubeContainerRef.current;
-      if (!container) {
-        // Le conteneur est toujours rendu par `PlayerBar` ; ce cas ne devrait pas se
-        // produire, mais échouer silencieusement vaut mieux que planter la lecture.
-        return;
-      }
+        const container = youtubeContainerRef.current;
+        if (!container) {
+          // Le conteneur est toujours rendu par `PlayerBar` ; ce cas ne devrait pas se
+          // produire, mais échouer silencieusement vaut mieux que planter la lecture.
+          return;
+        }
 
-      // Créée hors de React : c'est ce nœud, et lui seul, que l'API YouTube remplacera
-      // par un <iframe>. React ne le rend jamais via JSX, donc ne peut jamais tenter de
-      // le déplacer ou de le retirer une fois cette substitution faite.
-      const target = document.createElement('div');
-      container.appendChild(target);
+        // Créée hors de React : c'est ce nœud, et lui seul, que l'API YouTube remplacera
+        // par un <iframe>. React ne le rend jamais via JSX, donc ne peut jamais tenter de
+        // le déplacer ou de le retirer une fois cette substitution faite.
+        const target = document.createElement('div');
+        container.appendChild(target);
 
-      playerRef.current = new window.YT.Player(target, {
-        videoId,
-        // `autoplay: 1` suffit en général, mais certains navigateurs ignorent ce
-        // paramètre selon le moment exact où le lecteur devient prêt : le clic sur
-        // « play » est un vrai geste utilisateur, donc l'appel explicite dans `onReady`
-        // est autorisé par les politiques d'autoplay et sert de filet de sécurité — sans
-        // lui, la lecture démarrait parfois en pause, forçant à recliquer dans le lecteur.
-        // `mute` reprend la préférence en vigueur : un nouveau lecteur (album différent,
-        // ou premier lecteur de la session) doit rester coupé si l'utilisateur l'avait
-        // demandé — `loadVideoById` (branche au-dessus) n'a pas besoin de cette ligne,
-        // il réutilise le même lecteur, dont l'état de coupure ne bouge pas tout seul.
-        playerVars: { playsinline: 1, autoplay: 1, mute: mutedRef.current ? 1 : 0 },
-        events: {
-          onReady: (event) => {
-            event.target.playVideo();
+        playerRef.current = new window.YT.Player(target, {
+          videoId,
+          // `autoplay: 1` suffit en général, mais certains navigateurs ignorent ce
+          // paramètre selon le moment exact où le lecteur devient prêt : le clic sur
+          // « play » est un vrai geste utilisateur, donc l'appel explicite dans `onReady`
+          // est autorisé par les politiques d'autoplay et sert de filet de sécurité — sans
+          // lui, la lecture démarrait parfois en pause, forçant à recliquer dans le lecteur.
+          // `mute` reprend la préférence en vigueur : un nouveau lecteur (album différent,
+          // ou premier lecteur de la session) doit rester coupé si l'utilisateur l'avait
+          // demandé — `loadVideoById` (branche au-dessus) n'a pas besoin de cette ligne,
+          // il réutilise le même lecteur, dont l'état de coupure ne bouge pas tout seul.
+          playerVars: { playsinline: 1, autoplay: 1, mute: mutedRef.current ? 1 : 0 },
+          events: {
+            onReady: (event) => {
+              if (event.target !== playerRef.current) return;
+              event.target.playVideo();
+            },
+            onStateChange: (event) => {
+              if (!window.YT || event.target !== playerRef.current) {
+                return;
+              }
+              if (event.data === window.YT.PlayerState.ENDED) {
+                advanceQueueRef.current();
+                return;
+              }
+              if (event.data === window.YT.PlayerState.PLAYING) {
+                clearTimeout(youtubeTimeoutRef.current);
+                setPlaying(true);
+              } else if (event.data === window.YT.PlayerState.PAUSED) {
+                clearTimeout(youtubeTimeoutRef.current);
+                setPlaying(false);
+              }
+            },
+            onError: (event) => {
+              if (event.target === playerRef.current) youtubeFailureRef.current();
+            },
           },
-          onStateChange: (event) => {
-            if (!window.YT) {
-              return;
-            }
-            if (event.data === window.YT.PlayerState.ENDED) {
-              advanceQueueRef.current();
-              return;
-            }
-            if (event.data === window.YT.PlayerState.PLAYING) {
-              setPlaying(true);
-            } else if (event.data === window.YT.PlayerState.PAUSED) {
-              setPlaying(false);
-            }
-          },
-        },
+        });
+      })
+      .catch(() => {
+        if (requestTokenRef.current === token) youtubeFailureRef.current();
       });
-    });
   }, []);
 
   const stopYoutubePlayer = useCallback(() => {
+    clearTimeout(youtubeTimeoutRef.current);
     playerRef.current?.destroy();
     playerRef.current = null;
     if (youtubeContainerRef.current) {
@@ -258,7 +303,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const applyResolution = useCallback(
-    (response: ResolutionResponse) => {
+    (response: ResolutionResponse, fromHistory = false) => {
       if (response.status === 'empty' || !response.track) {
         // Sans quoi la vidéo précédente resterait montée — hors écran (le conteneur
         // passe en `hidden`), mais toujours en train de jouer.
@@ -266,7 +311,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
         if (activeRadioSessionRef.current) {
           const reason = response.status === 'unavailable' ? 'unavailable' : 'exhausted';
-          activeRadioSessionRef.current = null;
+          radioPositionRef.current = radioHistoryRef.current.length;
+          setCanGoBack(radioHistoryRef.current.length > 0);
           updateState({ status: 'radio_ended', reason });
           return;
         }
@@ -276,6 +322,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       }
 
       const track = response.track;
+      if (
+        activeRadioSessionRef.current &&
+        !fromHistory &&
+        response.playback?.status === 'resolved'
+      ) {
+        radioHistoryRef.current.push(response);
+        radioPositionRef.current = radioHistoryRef.current.length - 1;
+        setCanGoBack(radioPositionRef.current > 0);
+      }
       currentTrackIdRef.current = track.id;
 
       if (!response.playback || response.playback.status === 'unresolved') {
@@ -330,12 +385,20 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
     const track = current.track;
     const radioSessionId = activeRadioSessionRef.current;
+    const token = (requestTokenRef.current += 1);
+    clearTimeout(youtubeTimeoutRef.current);
+    if (radioSessionId && radioPositionRef.current + 1 < radioHistoryRef.current.length) {
+      radioPositionRef.current += 1;
+      setCanGoBack(radioPositionRef.current > 0);
+      applyResolution(radioHistoryRef.current[radioPositionRef.current]!, true);
+      return;
+    }
     updateState({ status: 'loading', track });
 
     // En Radio, « la suite » est un nouveau tirage dans la session ; sinon, c'est la
     // piste suivante du même album, dans l'ordre du disque (§13.6).
     const response = radioSessionId
-      ? await postJson(`/api/radio-sessions/${radioSessionId}/draws`, {})
+      ? await fetchRadioDraw(radioSessionId)
       : await postJson('/api/resolutions/next', {
           releaseId: track.releaseId,
           afterOrdinal: track.ordinal,
@@ -343,11 +406,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
     // La piste en cours a changé entre-temps (l'utilisateur a lancé autre chose) : on
     // n'écrase pas son choix avec une réponse devenue obsolète.
-    if (currentTrackIdRef.current !== track.id) {
+    if (requestTokenRef.current !== token || currentTrackIdRef.current !== track.id) {
       return;
     }
 
     if (!response) {
+      stopYoutubePlayer();
       updateState({ status: 'idle' });
       return;
     }
@@ -360,21 +424,40 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     }
 
     applyResolution(response);
-  }, [applyResolution]);
+  }, [applyResolution, stopYoutubePlayer]);
 
   // La mutation d'une ref pendant le rendu est interdite (React) : on la fait dans un
   // effet, qui s'exécute après le commit et se réexécute à chaque nouvelle identité
   // d'`advanceQueue` (stable en pratique, `applyResolution` ne changeant pas non plus).
   useEffect(() => {
     advanceQueueRef.current = () => void advanceQueue();
-  }, [advanceQueue]);
+    youtubeFailureRef.current = () => {
+      const current = stateRef.current;
+      if (current.status !== 'playing_youtube') return;
+      if (activeRadioSessionRef.current) {
+        advanceQueueRef.current();
+      } else {
+        stopYoutubePlayer();
+        updateState({ status: 'error', track: current.track });
+      }
+    };
+  }, [advanceQueue, stopYoutubePlayer]);
+
+  useEffect(
+    () => () => {
+      clearTimeout(youtubeTimeoutRef.current);
+      playerRef.current?.destroy();
+    },
+    [],
+  );
 
   const playTrack = useCallback(
     async (trackId: string) => {
       // Choisir explicitement une piste ailleurs met fin à la Radio en cours, sans
       // confirmation à demander : c'est le comportement attendu d'un clic délibéré.
       activeRadioSessionRef.current = null;
-      requestTokenRef.current += 1;
+      resetRadioHistory();
+      const token = (requestTokenRef.current += 1);
       updateState({
         status: 'loading',
         track: {
@@ -389,6 +472,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       });
 
       const response = await postJson('/api/resolutions/track', { trackId });
+      if (requestTokenRef.current !== token) return;
       if (!response) {
         if (stateRef.current.status === 'loading') {
           updateState({ status: 'error', track: stateRef.current.track });
@@ -398,12 +482,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
       applyResolution(response);
     },
-    [applyResolution],
+    [applyResolution, resetRadioHistory],
   );
 
   const playAlbum = useCallback(
     async (discogsReleaseId: string) => {
       activeRadioSessionRef.current = null;
+      resetRadioHistory();
       const token = (requestTokenRef.current += 1);
       const placeholderTrack: TrackMeta = {
         id: '',
@@ -452,13 +537,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         await sleep(TRACKLIST_PENDING_POLL_INTERVAL_MS);
       }
     },
-    [applyResolution],
+    [applyResolution, resetRadioHistory],
   );
 
   const playFromRadio = useCallback(
     async (radioSessionId: string) => {
       activeRadioSessionRef.current = radioSessionId;
-      requestTokenRef.current += 1;
+      resetRadioHistory();
+      const token = (requestTokenRef.current += 1);
+      stopYoutubePlayer();
       updateState({
         status: 'loading',
         track: {
@@ -472,27 +559,37 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         },
       });
 
-      const response = await postJson(`/api/radio-sessions/${radioSessionId}/draws`, {});
-      if (!response) {
-        if (stateRef.current.status === 'loading') {
-          updateState({ status: 'error', track: stateRef.current.track });
-        }
-        return;
-      }
+      const response = await fetchRadioDraw(radioSessionId);
+      if (requestTokenRef.current !== token) return;
 
       applyResolution(response);
     },
-    [applyResolution],
+    [applyResolution, stopYoutubePlayer, resetRadioHistory],
   );
 
   const close = useCallback(() => {
     stopYoutubePlayer();
     currentTrackIdRef.current = null;
     activeRadioSessionRef.current = null;
+    resetRadioHistory();
     requestTokenRef.current += 1;
     setPlaying(true);
     updateState({ status: 'idle' });
-  }, [stopYoutubePlayer]);
+  }, [stopYoutubePlayer, resetRadioHistory]);
+
+  const previous = useCallback(() => {
+    if (
+      !activeRadioSessionRef.current ||
+      radioPositionRef.current <= 0 ||
+      stateRef.current.status === 'loading'
+    )
+      return;
+    requestTokenRef.current += 1;
+    clearTimeout(youtubeTimeoutRef.current);
+    radioPositionRef.current -= 1;
+    setCanGoBack(radioPositionRef.current > 0);
+    applyResolution(radioHistoryRef.current[radioPositionRef.current]!, true);
+  }, [applyResolution]);
 
   /** Bouton « piste suivante » : appelle la même logique que la fin automatique. */
   const skip = useCallback(() => {
@@ -553,6 +650,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         playAlbum,
         playFromRadio,
         skip,
+        previous,
+        canGoBack,
         muted,
         toggleMute,
         playing,

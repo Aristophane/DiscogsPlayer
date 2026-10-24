@@ -11,6 +11,25 @@ vi.mock('@/modules/playback/playback-context', () => ({
 }));
 const fetchMock = vi.fn();
 const ownerId = '00000000-0000-4000-8000-000000000001';
+
+it('présente une note Discogs dans une publication du fil sans la confondre avec un prix', () => {
+  const post = item(1);
+  post.kind = 'stat';
+  post.story = null;
+  post.statistic = {
+    metric: 'rating',
+    rating: 4.85,
+    ratingCount: 128,
+    price: '12.00',
+    have: 50,
+    want: 25,
+  };
+  render(<HomeFeed userId={ownerId} initial={page([post])} activeOwnerId={ownerId} />);
+  expect(screen.getByText(/4,85 \/ 5/)).toBeVisible();
+  expect(screen.getByText(/128 vote/)).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Explorer les stats' })).toBeVisible();
+  expect(screen.queryByText(/12,00/)).not.toBeInTheDocument();
+});
 function item(n: number): FeedItem {
   return {
     id: `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,

@@ -120,6 +120,20 @@
       "when": 1792504632394,
       "tag": "0016_keen_magneto",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792859329624,
+      "tag": "0017_sweet_maggott",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792864245887,
+      "tag": "0018_spotty_night_thrasher",
+      "breakpoints": true
     }
   ]
 }

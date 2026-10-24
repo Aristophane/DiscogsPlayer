@@ -20,11 +20,18 @@ import {
 
 const log = moduleLogger('radio');
 const MAX_ATTEMPTS_PER_DRAW = 6;
+const SEARCH_BUDGET_MS = 12_000;
+const RESOLUTION_TIMEOUT_MS = 6_000;
 
-export type RadioFilters = { genres?: string[] | undefined; styles?: string[] | undefined };
+export type RadioFilters = {
+  genres?: string[] | undefined;
+  styles?: string[] | undefined;
+  includeFriends?: boolean | undefined;
+};
 export type RadioSessionView = {
   id: string;
   collectionOwnerId: string;
+  includeFriends: boolean;
   filterGenres: string[];
   filterStyles: string[];
   completedAt: Date | null;
@@ -34,7 +41,7 @@ export type RadioDrawResult =
   | { status: 'exhausted' }
   | { status: 'unavailable' };
 
-function eligibleTracksCondition(collectionOwnerId: string, filters: RadioFilters) {
+function eligibleTracksCondition(userId: string, collectionOwnerId: string, filters: RadioFilters) {
   const genres = filters.genres ?? [];
   const styles = filters.styles ?? [];
   return sql`
@@ -42,7 +49,20 @@ function eligibleTracksCondition(collectionOwnerId: string, filters: RadioFilter
     and exists (
       select 1 from collection_instances ci
       where ci.release_id = t.release_id
-        and ci.user_id = ${collectionOwnerId}::uuid and ci.is_active = true
+        and ci.is_active = true
+        and (
+          ci.user_id = ${collectionOwnerId}::uuid
+          or (${filters.includeFriends ?? false} and exists (
+            select 1 from collection_shares cs
+            where cs.owner_id = ci.user_id and cs.grantee_id = ${userId}::uuid
+              and cs.revoked_at is null
+          ))
+        )
+        and (ci.user_id = ${userId}::uuid or exists (
+          select 1 from collection_shares cs
+          where cs.owner_id = ci.user_id and cs.grantee_id = ${userId}::uuid
+            and cs.revoked_at is null
+        ))
     )
     ${genres.length > 0 ? sql`and r.genres && ${sql.param(genres)}::text[]` : sql``}
     ${styles.length > 0 ? sql`and r.styles && ${sql.param(styles)}::text[]` : sql``}
@@ -54,6 +74,7 @@ export async function getActiveSession(userId: string): Promise<RadioSessionView
     .select({
       id: radioSessions.id,
       collectionOwnerId: radioSessions.collectionOwnerId,
+      includeFriends: radioSessions.includeFriends,
       filterGenres: radioSessions.filterGenres,
       filterStyles: radioSessions.filterStyles,
       completedAt: radioSessions.completedAt,
@@ -81,12 +102,14 @@ export async function createSession(
       .values({
         userId,
         collectionOwnerId,
+        includeFriends: filters.includeFriends ?? false,
         filterGenres: filters.genres ?? [],
         filterStyles: filters.styles ?? [],
       })
       .returning({
         id: radioSessions.id,
         collectionOwnerId: radioSessions.collectionOwnerId,
+        includeFriends: radioSessions.includeFriends,
         filterGenres: radioSessions.filterGenres,
         filterStyles: radioSessions.filterStyles,
         completedAt: radioSessions.completedAt,
@@ -139,16 +162,28 @@ async function claimCandidate(
   });
 }
 
-/** Deux recherches concurrentes peuvent découvrir le même média : une seule le sert. */
+/**
+ * Deux recherches concurrentes peuvent découvrir le même média : une seule le sert.
+ * Une réservation peut finir après qu'un autre tirage a épuisé le bassin : elle reste
+ * valide. Les réponses d'une lecture remplacée sont ignorées par le client.
+ */
 async function recordPlayback(
   userId: string,
   sessionId: string,
   candidate: RadioCandidate,
+  collectionOwnerId: string,
+  filters: RadioFilters,
 ): Promise<boolean> {
   return db.transaction(async (tx) => {
     const session = await tx.execute<{ id: string }>(sql`
       select id from radio_sessions
-      where id = ${sessionId}::uuid and user_id = ${userId}::uuid for update
+      where id = ${sessionId}::uuid and user_id = ${userId}::uuid
+        and exists (
+          select 1 from discogs_tracks t join discogs_releases r on r.id = t.release_id
+          where t.id = ${candidate.trackId}::uuid
+            and ${eligibleTracksCondition(userId, collectionOwnerId, filters)}
+        )
+      for update
     `);
     if (session.length === 0) return false;
     const duplicate = await tx.execute<{ track_id: string }>(sql`
@@ -192,13 +227,17 @@ export async function draw(
     .where(and(eq(radioSessions.id, sessionId), eq(radioSessions.userId, userId)));
   if (!session || session.completedAt !== null) return { status: 'exhausted' };
 
-  const filters = { genres: session.filterGenres, styles: session.filterStyles };
+  const filters = {
+    genres: session.filterGenres,
+    styles: session.filterStyles,
+    includeFriends: session.includeFriends,
+  };
   const candidates = await db.execute<CandidateRow>(sql`
     select t.id as "trackId", t.release_id as "releaseId",
       r.artists_normalized as "artistKey",
       r.artists_normalized || chr(31) || t.title_normalized as "recordingKey"
     from discogs_tracks t join discogs_releases r on r.id = t.release_id
-    where ${eligibleTracksCondition(session.collectionOwnerId, filters)}
+    where ${eligibleTracksCondition(userId, session.collectionOwnerId, filters)}
       and not exists (
         select 1 from radio_session_tracks rst
         where rst.session_id = ${sessionId}::uuid and rst.track_id = t.id
@@ -236,9 +275,10 @@ export async function draw(
     videoId: row.videoId ?? known.get(row.trackId)?.videoId ?? null,
   }));
   let searches = 0;
+  const deadline = Date.now() + SEARCH_BUDGET_MS;
   while (remaining.length > 0) {
     const available =
-      searches < MAX_ATTEMPTS_PER_DRAW
+      searches < MAX_ATTEMPTS_PER_DRAW && Date.now() < deadline
         ? remaining
         : remaining.filter((candidate) => candidate.videoId !== null);
     const candidate = selectRadioCandidate(available, history, sessionId);
@@ -249,13 +289,43 @@ export async function draw(
     remaining = remaining.filter((row) => row.trackId !== candidate.trackId);
     if (!(await claimCandidate(userId, sessionId, candidate))) continue;
     if (candidate.videoId === null) searches += 1;
-    const playback = await resolveTrack(userId, candidate.trackId, youtubeApi);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let playback: ResolvedPlayback | null;
+    try {
+      // La résolution locale conserve la mise en cache habituelle. Son délai reste
+      // entier même si le budget de recherche est épuisé : ce sont les recherches
+      // externes qui doivent céder la place à ce repli.
+      const timeoutMs =
+        candidate.videoId === null
+          ? Math.min(RESOLUTION_TIMEOUT_MS, Math.max(1, deadline - Date.now()))
+          : RESOLUTION_TIMEOUT_MS;
+      playback = await Promise.race([
+        resolveTrack(userId, candidate.trackId, youtubeApi),
+        new Promise<null>((resolve) => {
+          timeout = setTimeout(resolve, timeoutMs, null);
+        }),
+      ]);
+    } catch (error) {
+      log.warn(
+        { sessionId, trackId: candidate.trackId, err: error },
+        'piste radio ignorée après échec',
+      );
+      continue;
+    } finally {
+      clearTimeout(timeout);
+    }
     if (playback?.status !== 'resolved' || playback.provider !== 'youtube') continue;
     const resolvedCandidate = { ...candidate, videoId: playback.videoId };
     // Vérification après recherche, puis une seconde sous verrou pour la concurrence.
     if (
       wasPlayedInSession(resolvedCandidate, history, sessionId) ||
-      !(await recordPlayback(userId, sessionId, resolvedCandidate))
+      !(await recordPlayback(
+        userId,
+        sessionId,
+        resolvedCandidate,
+        session.collectionOwnerId,
+        filters,
+      ))
     )
       continue;
     log.info({ sessionId, trackId: candidate.trackId, searches }, 'piste radio tirée');

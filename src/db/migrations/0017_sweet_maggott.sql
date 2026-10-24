@@ -1,0 +1,1 @@
+ALTER TABLE "radio_sessions" ADD COLUMN "include_friends" boolean DEFAULT false NOT NULL;

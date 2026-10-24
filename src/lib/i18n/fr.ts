@@ -20,6 +20,8 @@ export const fr = {
   'feed.kind.addition': 'Chez vos amis',
   'feed.kind.listen': 'À réécouter',
   'feed.kind.stat': 'Côté collection',
+  'feed.ratingText':
+    'La note attribuée à cette édition par la communauté Discogs. Retrouvez les classements dans les statistiques de la collection.',
   'feed.kind.album': 'L’histoire d’un disque',
   'feed.kind.artist': 'Coulisses d’artiste',
   'feed.kind.news': 'Dans la presse',
@@ -60,10 +62,10 @@ export const fr = {
   'feed.error': 'La suite du fil n’a pas pu être chargée. Votre lecture est conservée.',
   'feed.retry': 'Réessayer',
   'feed.end': 'Fin du fil',
-  'stats.eyebrow': 'Valeur & rareté',
+  'stats.eyebrow': 'Valeur, rareté & notes',
   'stats.title': 'Les chiffres de la collection',
   'stats.description':
-    'Explorez les prix affichés, les éditions recherchées et celles que peu de collectionneurs déclarent posséder. Le sélecteur de collection permet aussi de consulter les stats de vos amis.',
+    'Explorez les notes de la communauté Discogs, les prix affichés, les éditions recherchées et les moins répandues. Le sélecteur de collection permet aussi de consulter les stats de vos amis.',
   'stats.editions': 'Éditions distinctes',
   'stats.copies': 'Exemplaires',
   'stats.priced': 'Éditions avec un prix',
@@ -302,6 +304,19 @@ export const fr = {
   'statistics.want': 'En wantlist',
   'statistics.unavailable': 'Donnée indisponible',
   'statistics.updated': 'Discogs · mis à jour le {date}',
+  'rating.community': 'Note de la communauté Discogs',
+  'rating.value': '{average} / 5',
+  'rating.vote': '{count} vote',
+  'rating.votes': '{count} votes',
+  'rating.noVotes': 'Aucun vote pour cette édition.',
+  'rating.unavailable': 'Note indisponible pour le moment.',
+  'home.highlights.bestRated': 'Les mieux notés',
+  'home.highlights.bestRated.hint':
+    'Les cinq éditions les mieux notées par la communauté Discogs. À note égale, le nombre de votes départage les éditions.',
+  'home.highlights.worstRated': 'Les moins bien notés',
+  'home.highlights.worstRated.hint':
+    'Les cinq éditions les moins bien notées par la communauté Discogs. Les éditions sans vote sont exclues.',
+  'home.highlights.noRatings': 'Aucune note Discogs disponible pour cette collection.',
   'home.highlights.title': 'Le top de votre collection',
   'home.highlights.friendTitle': 'Le top de la collection de {username}',
   'home.highlights.description':
@@ -355,7 +370,12 @@ export const fr = {
   // Radio (ADR-0006)
   'radio.title': 'Radio',
   'radio.explanation':
-    'Lecture continue à travers votre collection filtrée, en priorité depuis les pistes déjà connues.',
+    'Choisissez votre radio et écoutez les titres en continu, avec les genres et styles de votre choix.',
+  'radio.source.title': 'Choisir une radio',
+  'radio.source.mine': 'Ma collection',
+  'radio.source.mine.hint': 'Uniquement les disques de votre collection.',
+  'radio.source.friends': 'Ma collection + amis',
+  'radio.source.friends.hint': 'Vos disques et les collections que vos amis partagent avec vous.',
   'radio.filters.title': 'Filtrer la radio',
   'radio.filters.more': '+{count} autre(s) valeur(s), moins fréquentes',
   'radio.start': 'Lancer la radio',
@@ -368,6 +388,7 @@ export const fr = {
   'player.loading.tracklistPending': 'Récupération des pistes de l’album…',
   'player.close': 'Fermer le lecteur',
   'player.skip': 'Piste suivante',
+  'player.previous': 'Piste précédente',
   'player.mute': 'Couper le son',
   'player.unmute': 'Rétablir le son',
   'player.pause': 'Mettre en pause',

@@ -115,6 +115,7 @@ function content(
   candidate: Candidate,
   names: Map<string, string>,
   kind: FeedContent['kind'],
+  metric: 'price' | 'rating' = 'price',
 ): FeedContent {
   return feedContentSchema.parse({
     kind,
@@ -127,7 +128,14 @@ function content(
     story: null,
     statistic:
       kind === 'stat'
-        ? { price: candidate.price, have: candidate.have, want: candidate.want }
+        ? {
+            price: candidate.price,
+            have: candidate.have,
+            want: candidate.want,
+            metric,
+            rating: candidate.rating,
+            ratingCount: candidate.ratingCount,
+          }
         : null,
   });
 }
@@ -269,7 +277,26 @@ async function addLocalPosts(userId: string, day: string, now: Date) {
   const ranked = selected
     .filter((item) => item.price !== null && Number(item.price) > 0)
     .sort((a, b) => Number(b.price) - Number(a.price));
-  const stat = ranked[0];
+  const rated = selected
+    .filter(
+      (item) =>
+        item.rating !== null &&
+        item.rating > 0 &&
+        item.ratingCount !== null &&
+        item.ratingCount > 0,
+    )
+    .sort(
+      (a, b) =>
+        b.rating! - a.rating! ||
+        b.ratingCount! - a.ratingCount! ||
+        a.discogsReleaseId.localeCompare(b.discogsReleaseId),
+    );
+  const lastStat = recent
+    .filter((row) => row.content.kind === 'stat')
+    .sort((a, b) => b.day.localeCompare(a.day))[0];
+  const preferRating = lastStat?.content.statistic?.metric !== 'rating' || !ranked.length;
+  const metric = rated.length && preferRating ? 'rating' : 'price';
+  const stat = metric === 'rating' ? rated[0] : ranked[0];
   if (
     stat &&
     !recent.some(
@@ -279,7 +306,7 @@ async function addLocalPosts(userId: string, day: string, now: Date) {
   )
     posts.push({
       candidate: stat,
-      content: content(stat, names, 'stat'),
+      content: content(stat, names, 'stat', metric),
       key: `stat:${day}:${stat.discogsReleaseId}`,
     });
   await appendPosts(userId, day, posts);

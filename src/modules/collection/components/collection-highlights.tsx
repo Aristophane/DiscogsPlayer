@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { t } from '@/lib/i18n';
 import { CommunityStats } from '@/modules/catalog/components/community-stats';
+import { CommunityRating } from '@/modules/catalog/components/community-rating';
 import type { RankedRelease } from '../service';
 import type { Highlights } from '../home-contracts';
 import { coverProxyUrl } from '../cover';
@@ -49,6 +50,8 @@ export function CollectionHighlights({
           <div className="grid gap-10">
             <Ranking kind="valuable" items={highlights.valuable} />
             <Ranking kind="wanted" items={highlights.wanted} />
+            <Ranking kind="bestRated" items={highlights.bestRated} />
+            <Ranking kind="worstRated" items={highlights.worstRated} />
           </div>
         </>
       )}
@@ -56,7 +59,14 @@ export function CollectionHighlights({
   );
 }
 
-function Ranking({ kind, items }: { kind: 'wanted' | 'valuable'; items: RankedRelease[] }) {
+function Ranking({
+  kind,
+  items,
+}: {
+  kind: 'wanted' | 'valuable' | 'bestRated' | 'worstRated';
+  items: RankedRelease[];
+}) {
+  const rating = kind === 'bestRated' || kind === 'worstRated';
   const headingId = `top-${kind}`;
   return (
     <section aria-labelledby={headingId} className="min-w-0">
@@ -66,7 +76,13 @@ function Ranking({ kind, items }: { kind: 'wanted' | 'valuable'; items: RankedRe
       <p className="mt-1 text-xs leading-relaxed text-muted">{t(`home.highlights.${kind}.hint`)}</p>
       {items.length === 0 ? (
         <p className="py-6 text-sm text-muted">
-          {t(kind === 'wanted' ? 'home.highlights.noWanted' : 'home.highlights.noPrice')}
+          {t(
+            rating
+              ? 'home.highlights.noRatings'
+              : kind === 'wanted'
+                ? 'home.highlights.noWanted'
+                : 'home.highlights.noPrice',
+          )}
         </p>
       ) : (
         <ol className="mt-5 grid grid-cols-2 items-start gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-5">
@@ -105,7 +121,14 @@ function Ranking({ kind, items }: { kind: 'wanted' | 'valuable'; items: RankedRe
                   </div>
                 </PersonalReleaseLink>
                 <div className="mt-2">
-                  <CommunityStats have={item.communityHave} want={item.communityWant} />
+                  {rating ? (
+                    <CommunityRating
+                      average={item.communityRating ?? null}
+                      count={item.communityRatingCount ?? null}
+                    />
+                  ) : (
+                    <CommunityStats have={item.communityHave} want={item.communityWant} />
+                  )}
                 </div>
                 {item.statisticsFetchedAt ? (
                   <p className="mt-1 text-[11px] text-muted">

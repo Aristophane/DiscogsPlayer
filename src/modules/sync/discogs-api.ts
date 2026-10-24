@@ -96,6 +96,13 @@ const releaseSchema = z.object({
     .object({
       have: z.number().int().nonnegative().nullable().optional(),
       want: z.number().int().nonnegative().nullable().optional(),
+      rating: z
+        .object({
+          average: z.number().min(0).max(5).nullable().optional(),
+          count: z.number().int().nonnegative().nullable().optional(),
+        })
+        .nullable()
+        .optional(),
     })
     .nullable()
     .optional(),

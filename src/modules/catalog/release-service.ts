@@ -37,6 +37,8 @@ export type ReleaseView = {
   detailsFetchedAt: Date | null;
   communityHave: number | null;
   communityWant: number | null;
+  communityRating: number | null;
+  communityRatingCount: number | null;
   lowestPriceEur: string | null;
   numForSale: number | null;
   statisticsFetchedAt: Date | null;
@@ -65,6 +67,8 @@ export async function getReleaseForUser(
       detailsFetchedAt: discogsReleases.detailsFetchedAt,
       communityHave: discogsReleases.communityHave,
       communityWant: discogsReleases.communityWant,
+      communityRating: sql<number | null>`${discogsReleases.communityRating}::float8`,
+      communityRatingCount: discogsReleases.communityRatingCount,
       lowestPriceEur: discogsReleases.lowestPriceEur,
       numForSale: discogsReleases.numForSale,
       statisticsFetchedAt: discogsReleases.statisticsFetchedAt,

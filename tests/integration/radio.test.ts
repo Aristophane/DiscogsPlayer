@@ -9,6 +9,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { db, sql } from '@/db/client';
 import {
   collectionInstances,
+  collectionShares,
   discogsReleases,
   discogsTracks,
   discogsReleaseVideos,
@@ -22,6 +23,7 @@ import { applyReleaseDetails } from '@/modules/catalog/service';
 import type { YoutubeApi, YoutubeSearchResult } from '@/modules/providers/youtube/api';
 import { createSession, draw, getActiveSession } from '@/modules/radio/service';
 import { resolveTrack } from '@/modules/resolution/service';
+import { listFacets } from '@/modules/collection/service';
 
 const ALICE = { id: 998_000_001, username: 'alice_radio' };
 const TOKENS = { token: 'jeton', tokenSecret: 'secret' };
@@ -40,7 +42,9 @@ class FakeYoutubeApi implements YoutubeApi {
 }
 
 async function cleanup() {
-  await db.delete(users).where(eq(users.discogsUserId, String(ALICE.id)));
+  await db
+    .delete(users)
+    .where(inArray(users.discogsUserId, [String(ALICE.id), '998000002', '998000003']));
   await db.delete(discogsReleases).where(
     inArray(
       discogsReleases.discogsReleaseId,
@@ -117,6 +121,11 @@ describe('priorité aux pistes déjà résolues (ADR-0006 point 3)', () => {
     expect(result.status).toBe('track');
     if (result.status === 'track') {
       expect(result.playback).toMatchObject({ status: 'resolved', provider: 'youtube' });
+      const cached = await db
+        .select()
+        .from(trackResolutions)
+        .where(eq(trackResolutions.trackId, result.trackId));
+      expect(cached).toHaveLength(1);
     }
     expect(api.calls).toBe(0);
   });
@@ -408,6 +417,116 @@ describe('filtres Genre et Style', () => {
     // Une seule piste Jazz : le second tirage est épuisé, jamais la piste Rock.
     expect(second).toEqual({ status: 'exhausted' });
   });
+});
+
+describe('radio personnelle et radio avec les amis', () => {
+  async function seedFriends() {
+    const bob = await upsertUserFromDiscogs({ id: 998_000_002, username: 'bob_radio' }, TOKENS);
+    const charlie = await upsertUserFromDiscogs(
+      { id: 998_000_003, username: 'charlie_radio' },
+      TOKENS,
+    );
+    const mine = await seedRelease({
+      n: 1,
+      userId: aliceId,
+      genre: 'Rock',
+      trackCount: 1,
+      withVideo: true,
+    });
+    const shared = await seedRelease({
+      n: 2,
+      userId: bob.id,
+      genre: 'Jazz',
+      trackCount: 1,
+      withVideo: true,
+    });
+    await seedRelease({ n: 3, userId: charlie.id, genre: 'Soul', trackCount: 1, withVideo: true });
+    await db.insert(collectionShares).values([
+      { ownerId: bob.id, granteeId: aliceId },
+      { ownerId: aliceId, granteeId: charlie.id },
+    ]);
+    return { bob, mine, shared };
+  }
+
+  it('la radio personnelle exclut les amis', async () => {
+    await seedFriends();
+    const session = await createSession(aliceId, aliceId, {});
+    expect(session.includeFriends).toBe(false);
+    expect(await draw(aliceId, session.id, new FakeYoutubeApi())).toMatchObject({
+      status: 'track',
+    });
+    expect(await draw(aliceId, session.id, new FakeYoutubeApi())).toEqual({ status: 'exhausted' });
+  });
+
+  it('la radio amis mélange ma collection et les partages reçus, sans doublon', async () => {
+    const { bob, mine, shared } = await seedFriends();
+    await db
+      .insert(collectionInstances)
+      .values({ userId: bob.id, releaseId: mine, discogsInstanceId: '998900001', isActive: true });
+    const session = await createSession(aliceId, aliceId, { includeFriends: true });
+    expect(session.includeFriends).toBe(true);
+    const results = [
+      await draw(aliceId, session.id, new FakeYoutubeApi()),
+      await draw(aliceId, session.id, new FakeYoutubeApi()),
+    ];
+    const expected = await db
+      .select({ id: discogsTracks.id })
+      .from(discogsTracks)
+      .where(inArray(discogsTracks.releaseId, [mine, shared]));
+    expect(
+      results.map((result) => (result.status === 'track' ? result.trackId : null)).sort(),
+    ).toEqual(expected.map((track) => track.id).sort());
+    expect(await draw(aliceId, session.id, new FakeYoutubeApi())).toEqual({ status: 'exhausted' });
+    const facets = await listFacets([aliceId, bob.id]);
+    expect(facets.genres).toEqual([
+      { value: 'Jazz', count: 1 },
+      { value: 'Rock', count: 1 },
+    ]);
+  });
+
+  it('filtre aussi les collections des amis et respecte immédiatement une révocation', async () => {
+    const { bob } = await seedFriends();
+    const personal = await createSession(aliceId, aliceId, { genres: ['Jazz'] });
+    expect(await draw(aliceId, personal.id, new FakeYoutubeApi())).toEqual({ status: 'exhausted' });
+    const mixed = await createSession(aliceId, aliceId, { includeFriends: true, genres: ['Jazz'] });
+    expect(await draw(aliceId, mixed.id, new FakeYoutubeApi())).toMatchObject({ status: 'track' });
+    const revoked = await createSession(aliceId, aliceId, {
+      includeFriends: true,
+      genres: ['Jazz'],
+    });
+    await db
+      .update(collectionShares)
+      .set({ revokedAt: new Date() })
+      .where(eq(collectionShares.ownerId, bob.id));
+    expect(await draw(aliceId, revoked.id, new FakeYoutubeApi())).toEqual({ status: 'exhausted' });
+  });
+});
+
+describe('recherches radio défaillantes', () => {
+  async function seedFallback() {
+    await seedRelease({ n: 1, userId: aliceId, genre: 'Rock', trackCount: 1, withVideo: true });
+    const first = await createSession(aliceId, aliceId, {});
+    const known = await draw(aliceId, first.id, new FakeYoutubeApi());
+    await seedRelease({ n: 2, userId: aliceId, genre: 'Rock', trackCount: 1, withVideo: false });
+    const session = await createSession(aliceId, aliceId, {});
+    return { known, session };
+  }
+
+  it('passe à la piste connue si la recherche lève une erreur inattendue', async () => {
+    const { known, session } = await seedFallback();
+    const api: YoutubeApi = {
+      search: async () => {
+        throw new Error('recherche interrompue');
+      },
+    };
+    expect(await draw(aliceId, session.id, api)).toEqual(known);
+  });
+
+  it('passe à la piste connue si la recherche ne répond jamais', async () => {
+    const { known, session } = await seedFallback();
+    const api: YoutubeApi = { search: () => new Promise(() => {}) };
+    expect(await draw(aliceId, session.id, api)).toEqual(known);
+  }, 15_000);
 });
 
 describe('gestion des sessions', () => {

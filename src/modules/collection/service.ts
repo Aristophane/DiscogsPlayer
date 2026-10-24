@@ -254,12 +254,17 @@ export type Facet = { value: string; count: number };
 export type RankedRelease = Pick<
   CollectionItem,
   'discogsReleaseId' | 'title' | 'artists' | 'coverUrl' | 'communityHave' | 'communityWant'
-> & { lowestPriceEur: string | null; statisticsFetchedAt: Date | null };
+> & {
+  lowestPriceEur: string | null;
+  statisticsFetchedAt: Date | null;
+  communityRating?: number | null | undefined;
+  communityRatingCount?: number | null | undefined;
+};
 
 /** Deux tops sur les éditions actives du propriétaire, jamais sur le catalogue global. */
 export async function getCollectionHighlights(userId: string) {
   const threshold = new Date(Date.now() - STATISTICS_FRESHNESS_MS).toISOString();
-  const ranked = (kind: 'wanted' | 'value') =>
+  const ranked = (kind: 'wanted' | 'value' | 'bestRated' | 'worstRated') =>
     db
       .select({
         discogsReleaseId: discogsReleases.discogsReleaseId,
@@ -270,6 +275,8 @@ export async function getCollectionHighlights(userId: string) {
         communityWant: discogsReleases.communityWant,
         lowestPriceEur: discogsReleases.lowestPriceEur,
         statisticsFetchedAt: discogsReleases.statisticsFetchedAt,
+        communityRating: sql<number | null>`${discogsReleases.communityRating}::float8`,
+        communityRatingCount: discogsReleases.communityRatingCount,
       })
       .from(collectionInstances)
       .innerJoin(discogsReleases, eq(discogsReleases.id, collectionInstances.releaseId))
@@ -278,26 +285,37 @@ export async function getCollectionHighlights(userId: string) {
           ...baseFilters(userId, {}),
           kind === 'wanted'
             ? sql`${discogsReleases.communityWant} > 0`
-            : sql`${discogsReleases.lowestPriceEur} > 0 and ${discogsReleases.numForSale} > 0`,
+            : kind === 'value'
+              ? sql`${discogsReleases.lowestPriceEur} > 0 and ${discogsReleases.numForSale} > 0`
+              : sql`${discogsReleases.communityRating} > 0 and ${discogsReleases.communityRatingCount} > 0`,
         ),
       )
       .groupBy(discogsReleases.id)
       .orderBy(
         kind === 'wanted'
           ? sql`${discogsReleases.communityWant} desc`
-          : sql`${discogsReleases.lowestPriceEur} desc`,
+          : kind === 'value'
+            ? sql`${discogsReleases.lowestPriceEur} desc`
+            : kind === 'bestRated'
+              ? sql`${discogsReleases.communityRating} desc`
+              : sql`${discogsReleases.communityRating} asc`,
+        ...(kind === 'bestRated' || kind === 'worstRated'
+          ? [sql`${discogsReleases.communityRatingCount} desc`]
+          : []),
         discogsReleases.titleNormalized,
         discogsReleases.id,
       )
       .limit(5);
-  const [wanted, valuable, [coverage]] = await Promise.all([
+  const [wanted, valuable, bestRated, worstRated, [coverage]] = await Promise.all([
     ranked('wanted'),
     ranked('value'),
+    ranked('bestRated'),
+    ranked('worstRated'),
     db
       .select({
         total: sql<number>`count(distinct ${discogsReleases.id})::int`,
         fetched: sql<number>`count(distinct ${discogsReleases.id}) filter (where ${discogsReleases.statisticsFetchedAt} is not null)::int`,
-        fresh: sql<number>`count(distinct ${discogsReleases.id}) filter (where ${discogsReleases.statisticsFetchedAt} >= ${threshold}::timestamptz)::int`,
+        fresh: sql<number>`count(distinct ${discogsReleases.id}) filter (where ${discogsReleases.statisticsFetchedAt} >= ${threshold}::timestamptz and ${discogsReleases.communityRatingFetchedAt} >= ${threshold}::timestamptz)::int`,
       })
       .from(collectionInstances)
       .innerJoin(discogsReleases, eq(discogsReleases.id, collectionInstances.releaseId))
@@ -306,6 +324,8 @@ export async function getCollectionHighlights(userId: string) {
   return {
     wanted,
     valuable,
+    bestRated,
+    worstRated,
     total: coverage?.total ?? 0,
     fetched: coverage?.fetched ?? 0,
     fresh: coverage?.fresh ?? 0,
@@ -387,7 +407,9 @@ export async function listStaleCollectionStatistics(userId: string): Promise<str
       and(
         ...baseFilters(userId, {}),
         sql`(${discogsReleases.statisticsFetchedAt} is null
-      or ${discogsReleases.statisticsFetchedAt} < ${threshold}::timestamptz)`,
+      or ${discogsReleases.statisticsFetchedAt} < ${threshold}::timestamptz
+      or ${discogsReleases.communityRatingFetchedAt} is null
+      or ${discogsReleases.communityRatingFetchedAt} < ${threshold}::timestamptz)`,
       ),
     );
   return rows.map((row) => row.discogsReleaseId);
@@ -410,6 +432,8 @@ export async function listFeedCandidates(ownerIds: string[], seed: string) {
       >`case when ${discogsReleases.numForSale} > 0 then ${discogsReleases.lowestPriceEur} end`,
       have: discogsReleases.communityHave,
       want: discogsReleases.communityWant,
+      rating: sql<number | null>`${discogsReleases.communityRating}::float8`,
+      ratingCount: discogsReleases.communityRatingCount,
       addedAt: sql<string | null>`min(${collectionInstances.dateAdded})`,
       artistRefs: sql<unknown>`coalesce((select jsonb_agg(jsonb_build_object('id', a.discogs_artist_id, 'name', a.name) order by ra.position)
       from ${discogsReleaseArtists} ra inner join ${discogsArtists} a on a.id = ra.artist_id
@@ -486,7 +510,10 @@ export async function getCollectionMarketOverview(userId: string) {
  * Genres et styles réellement présents dans la collection de l'utilisateur, avec leur
  * nombre d'éditions. Proposer un filtre qui ne ramène rien serait une impasse.
  */
-export async function listFacets(userId: string): Promise<{ genres: Facet[]; styles: Facet[] }> {
+export async function listFacets(
+  userId: string | string[],
+): Promise<{ genres: Facet[]; styles: Facet[] }> {
+  const ownerIds = typeof userId === 'string' ? [userId] : userId;
   const query = async (column: SQL) => {
     const rows = await db
       .select({ value: sql<string>`value`, count: sql<string>`count(distinct release_id)::text` })
@@ -495,7 +522,7 @@ export async function listFacets(userId: string): Promise<{ genres: Facet[]; sty
           select distinct ${discogsReleases.id} as release_id, unnest(${column}) as value
           from ${collectionInstances}
           inner join ${discogsReleases} on ${discogsReleases.id} = ${collectionInstances.releaseId}
-          where ${collectionInstances.userId} = ${userId}::uuid
+          where ${inArray(collectionInstances.userId, ownerIds)}
             and ${collectionInstances.isActive} = true
         ) as facets`,
       )

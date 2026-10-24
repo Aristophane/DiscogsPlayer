@@ -131,6 +131,27 @@ const sources = () => ({
 });
 
 describe('fil quotidien personnel', () => {
+  it('propose une note Discogs dans le fil même sans prix, sans inclure une collection privée', async () => {
+    await db
+      .update(discogsReleases)
+      .set({ numForSale: 0 })
+      .where(inArray(discogsReleases.id, releaseIds));
+    await db
+      .update(discogsReleases)
+      .set({ communityRating: '4.80', communityRatingCount: 42 })
+      .where(eq(discogsReleases.id, releaseIds[0]!));
+    await db
+      .update(discogsReleases)
+      .set({ communityRating: '5.00', communityRatingCount: 100 })
+      .where(eq(discogsReleases.id, releaseIds[23]!));
+    await ensureDailyFeed(own, NOW);
+    const page = await getFeedPage(own, undefined, NOW);
+    const stat = page.items.find((item) => item.kind === 'stat');
+    expect(stat).toMatchObject({
+      discogsReleaseId: RELEASE_IDS[0],
+      statistic: { metric: 'rating', rating: 4.8, ratingCount: 42 },
+    });
+  });
   it('cherche au-delà des trois premiers artistes même si leurs articles ne donnent rien', async () => {
     const artists = await db
       .insert(discogsArtists)

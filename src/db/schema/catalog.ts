@@ -63,6 +63,9 @@ export const discogsReleases = pgTable(
     detailsFetchedAt: timestamp('details_fetched_at', { withTimezone: true }),
     communityHave: integer('community_have'),
     communityWant: integer('community_want'),
+    communityRating: numeric('community_rating', { precision: 3, scale: 2 }),
+    communityRatingCount: integer('community_rating_count'),
+    communityRatingFetchedAt: timestamp('community_rating_fetched_at', { withTimezone: true }),
     /** Prix minimum d'annonce, en EUR ; ce n'est pas un historique de ventes. */
     lowestPriceEur: numeric('lowest_price_eur', { precision: 14, scale: 2 }),
     numForSale: integer('num_for_sale'),

@@ -27,6 +27,12 @@ function statisticsValues(details: ReleaseDetails, now = new Date()) {
   return {
     communityHave: details.community?.have ?? null,
     communityWant: details.community?.want ?? null,
+    communityRating:
+      details.community?.rating?.count && details.community.rating.average
+        ? details.community.rating.average.toFixed(2)
+        : null,
+    communityRatingCount: details.community?.rating?.count ?? null,
+    communityRatingFetchedAt: now,
     lowestPriceEur: details.num_for_sale === 0 ? null : (details.lowest_price?.toFixed(2) ?? null),
     numForSale: details.num_for_sale ?? null,
     statisticsFetchedAt: now,
@@ -43,11 +49,20 @@ export async function applyReleaseStatistics(details: ReleaseDetails): Promise<v
 
 export async function releaseStatisticsAreFresh(discogsReleaseId: string): Promise<boolean> {
   const [release] = await db
-    .select({ fetchedAt: discogsReleases.statisticsFetchedAt })
+    .select({
+      fetchedAt: discogsReleases.statisticsFetchedAt,
+      ratingFetchedAt: discogsReleases.communityRatingFetchedAt,
+    })
     .from(discogsReleases)
     .where(eq(discogsReleases.discogsReleaseId, discogsReleaseId))
     .limit(1);
-  return !!release?.fetchedAt && release.fetchedAt.getTime() > Date.now() - STATISTICS_FRESHNESS_MS;
+  const threshold = Date.now() - STATISTICS_FRESHNESS_MS;
+  return (
+    !!release?.fetchedAt &&
+    release.fetchedAt.getTime() > threshold &&
+    !!release.ratingFetchedAt &&
+    release.ratingFetchedAt.getTime() > threshold
+  );
 }
 
 /**

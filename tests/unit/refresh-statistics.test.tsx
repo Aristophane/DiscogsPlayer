@@ -5,7 +5,15 @@ import { useState } from 'react';
 import { RefreshStatistics } from '@/modules/collection/components/refresh-statistics';
 import type { Highlights } from '@/modules/collection/home-contracts';
 
-const initial: Highlights = { wanted: [], valuable: [], total: 2, fetched: 1, fresh: 1 };
+const initial: Highlights = {
+  wanted: [],
+  valuable: [],
+  bestRated: [],
+  worstRated: [],
+  total: 2,
+  fetched: 1,
+  fresh: 1,
+};
 const fetchMock = vi.fn();
 
 function Harness() {

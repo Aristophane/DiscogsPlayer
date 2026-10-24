@@ -43,8 +43,18 @@ import { usePlayback } from '../playback-context';
  * doublon sans rien piloter côté Spotify.
  */
 export function PlayerBar() {
-  const { state, skip, muted, toggleMute, playing, togglePlayPause, close, setYoutubeContainer } =
-    usePlayback();
+  const {
+    state,
+    skip,
+    previous,
+    canGoBack,
+    muted,
+    toggleMute,
+    playing,
+    togglePlayPause,
+    close,
+    setYoutubeContainer,
+  } = usePlayback();
   const [expanded, setExpanded] = useState(true);
   const barRef = useRef<HTMLDivElement>(null);
   // Vrai seulement à la transition idle → actif : un repli choisi par l'utilisateur reste
@@ -149,6 +159,17 @@ export function PlayerBar() {
                 </button>
               ) : null}
 
+              {canGoBack ? (
+                <button
+                  type="button"
+                  onClick={previous}
+                  disabled={state.status === 'loading'}
+                  aria-label={t('player.previous')}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-sm disabled:opacity-50"
+                >
+                  <span aria-hidden="true">⏮</span>
+                </button>
+              ) : null}
               {canSkip ? (
                 <button
                   type="button"
@@ -285,6 +306,16 @@ export function PlayerBar() {
                 : t('player.radio.unavailable')}
             </p>
             <div className="flex shrink-0 gap-3">
+              {canGoBack ? (
+                <button
+                  type="button"
+                  onClick={previous}
+                  aria-label={t('player.previous')}
+                  className="rounded-md border border-border px-3 py-1.5 text-sm"
+                >
+                  <span aria-hidden="true">⏮</span>
+                </button>
+              ) : null}
               <Link href="/radio" className="text-sm underline">
                 {t('player.radio.restart')}
               </Link>
