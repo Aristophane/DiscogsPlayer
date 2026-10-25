@@ -224,6 +224,27 @@ docker build -f Dockerfile.coolify --build-arg NODE_ENV=production -t verif .
 Cette procédure aurait détecté ce défaut, ainsi que celui du §4 bis, avant tout
 déploiement.
 
+## 4 sexies. Cache d'images : `EACCES` après le démarrage
+
+Le serveur peut afficher `Ready`, puis échouer sur
+`EACCES: permission denied, mkdir '/app/.next/cache/images'` à la première demande
+d'image optimisée. Les fichiers copiés depuis l'étape de build appartiennent à `root`,
+alors que le serveur s'exécute sous l'utilisateur non privilégié `app`.
+
+Le `Dockerfile` crée désormais `.next/cache` et en attribue récursivement la propriété
+à `app` avant `USER app`. Reconstruire l'image puis redéployer le service web pour
+appliquer cette correction ; redémarrer l'ancien conteneur ne change pas ses droits.
+
+Après déploiement, ouvrir l'accueil et vérifier qu'une requête `/_next/image` pour le
+logo répond `200` sans nouvelle erreur `EACCES` dans les logs.
+
+Le message `The Server Reference ID did not match the expected format. Received "x"`
+est distinct : une requête contient un identifiant de Server Action invalide. Le projet
+ne déclare aucune Server Action (`use server`). Des requêtes de scan automatisé sont
+donc une origine plausible, à confirmer avec les logs d'accès du proxy (méthode,
+chemin, IP, User-Agent). Voir le
+[diagnostic officiel Next.js](https://nextjs.org/docs/messages/failed-to-find-server-action).
+
 ## 5. Vérification après déploiement
 
 ```bash

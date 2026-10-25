@@ -58,6 +58,10 @@ COPY --from=build /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=build /app/tsconfig.json ./tsconfig.json
 COPY --from=build /app/src ./src
 
+# L'optimiseur d'images écrit dans .next/cache/images à l'exécution. Les COPY
+# ci-dessus appartiennent à root ; seul le cache doit être inscriptible par app.
+RUN mkdir -p /app/.next/cache && chown -R app:app /app/.next/cache
+
 USER app
 EXPOSE 3004
 
