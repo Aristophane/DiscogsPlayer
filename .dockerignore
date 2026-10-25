@@ -15,3 +15,5 @@ test-results/
 .DS_Store
 docs/
 tsconfig.tsbuildinfo
+# Exclude deployment metadata rewritten by Coolify from application build layers.
+/compose.coolify.apps.yaml
